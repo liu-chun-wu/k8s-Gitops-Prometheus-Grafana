@@ -8,7 +8,7 @@ resources:
 images:
   - name: ghcr.io/stefanprodan/podinfo
     newName: ghcr.io/stefanprodan/podinfo
-    newTag: c93861a534a6d9adc3e186f6b2d62c73f671a948
+    newTag: 5410f1e010ecbc4b5a17eb6c6979b3b6b63e099f
 patches:
   - target:
       kind: Deployment
