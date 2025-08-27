@@ -1,0 +1,125 @@
+# kube-prometheus-stack values for GitOps demo
+# Override default passwords and configure monitoring
+
+# Prometheus configuration
+prometheus:
+  prometheusSpec:
+    # Enable service monitor discovery
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    
+    # Retention policy
+    retention: 30d
+    
+    # Storage configuration
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    
+    # Resource limits
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 8Gi
+      requests:
+        cpu: 100m
+        memory: 512Mi
+
+# Grafana configuration
+grafana:
+  # SECURITY: Override default credentials
+  adminPassword: "admin123!@#"
+  
+  # Persistence
+  persistence:
+    enabled: true
+    storageClassName: standard
+    size: 10Gi
+  
+  # Resources
+  resources:
+    limits:
+      cpu: 200m
+      memory: 200Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  
+  # Service configuration for NodePort access
+  service:
+    type: NodePort
+    nodePort: 30300
+  
+  # Default dashboards
+  defaultDashboardsEnabled: true
+  defaultDashboardsTimezone: Asia/Taipei
+  
+  # Data sources
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+
+# AlertManager configuration
+alertmanager:
+  alertmanagerSpec:
+    # Storage
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+    
+    # Resources
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 25m
+        memory: 64Mi
+
+# Node exporter
+nodeExporter:
+  enabled: true
+
+# Kube state metrics
+kubeStateMetrics:
+  enabled: true
+
+# Disable some components for lightweight setup
+kubeEtcd:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+# Service monitor for application metrics
+additionalServiceMonitors:
+  - name: podinfo-monitor
+    selector:
+      matchLabels:
+        app: podinfo
+    namespaceSelector:
+      any: true
+    endpoints:
+    - port: http-metrics
+      interval: 15s
+      path: /metrics

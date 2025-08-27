@@ -1,0 +1,45 @@
+# General
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.tmp
+*~
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+
+# Docker
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+temp/
+tmp/
+
+# Secrets (never commit secrets!)
+secrets/
+*.secret
+*.key
+*.pem
+*-key.yaml
+*-secret.yaml
+
+# ArgoCD
+argocd-*-secret.yaml
+
+# Local development
+.env
+.env.local
+*.local
+
+# Build artifacts
+dist/
+build/
+
+# OS specific
+Thumbs.db
