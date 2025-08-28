@@ -64,7 +64,9 @@ jobs:
           fi
           
           # Update the image name and tag in kustomization.yaml
-          yq -i '.images[0].newName = "ghcr.io/${{ github.repository }}/podinfo"' k8s/podinfo/overlays/dev-ghcr/kustomization.yaml
+          # Convert repository name to lowercase for Docker registry compliance
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          yq -i ".images[0].newName = \"ghcr.io/${REPO_LOWER}/podinfo\"" k8s/podinfo/overlays/dev-ghcr/kustomization.yaml
           yq -i ".images[0].newTag = \"main-$(echo ${{ github.sha }} | cut -c1-7)\"" k8s/podinfo/overlays/dev-ghcr/kustomization.yaml
           
           # Configure git
