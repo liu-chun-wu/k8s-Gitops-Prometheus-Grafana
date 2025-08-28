@@ -22,12 +22,12 @@ nodes:
         hostPort: 9090
         protocol: TCP
       # Grafana
-      - containerPort: 30300
-        hostPort: 3000
+      - containerPort: 30301
+        hostPort: 3001
         protocol: TCP
       # Argo CD Server
-      - containerPort: 30080
-        hostPort: 8080
+      - containerPort: 30081
+        hostPort: 8081
         protocol: TCP
   - role: worker
   - role: worker

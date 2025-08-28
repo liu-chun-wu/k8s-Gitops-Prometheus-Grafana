@@ -1,18 +1,11 @@
-# kube-prometheus-stack values for GitOps demo
-# Override default passwords and configure monitoring
+# kube-prometheus-stack values for GitOps demo (revised)
 
-# Prometheus configuration
 prometheus:
   prometheusSpec:
-    # Enable service monitor discovery
     serviceMonitorSelectorNilUsesHelmValues: false
     serviceMonitorSelector: {}
     serviceMonitorNamespaceSelector: {}
-    
-    # Retention policy
     retention: 30d
-    
-    # Storage configuration
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -21,8 +14,6 @@ prometheus:
           resources:
             requests:
               storage: 10Gi
-    
-    # Resource limits
     resources:
       limits:
         cpu: 2000m
@@ -31,47 +22,83 @@ prometheus:
         cpu: 100m
         memory: 512Mi
 
-# Grafana configuration
 grafana:
-  # SECURITY: Override default credentials
-  adminPassword: "admin123!@#"
-  
-  # Persistence
+  # ✅ 安全：改用既有 Secret，不把密碼寫進 repo
   persistence:
     enabled: true
     storageClassName: standard
     size: 10Gi
-  
-  # Resources
+
   resources:
     limits:
-      cpu: 200m
-      memory: 200Mi
+      cpu: 300m
+      memory: 512Mi
     requests:
       cpu: 100m
-      memory: 128Mi
-  
-  # Service configuration for NodePort access
+      memory: 256Mi
+
   service:
     type: NodePort
-    nodePort: 30300
-  
-  # Default dashboards
-  defaultDashboardsEnabled: true
+    nodePort: 30301
+
+  # 預設套件儀表板先關閉，改用下方「現代化」儀表板
+  defaultDashboardsEnabled: false
   defaultDashboardsTimezone: Asia/Taipei
-  
-  # Data sources
+
+  # ⬇️ 重點：用 helm chart 內建機制自動匯入最新版儀表板（非 Angular）
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: "kubernetes"
+          orgId: 1
+          folder: "Kubernetes"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            # 固定使用官方建議的路徑規則 /var/lib/grafana/dashboards/<provider_name>
+            path: /var/lib/grafana/dashboards/kubernetes
+
+  # 這些條目會被轉成 ConfigMap，並由 sidecar 送入上面的 providers 路徑
+  dashboards:
+    kubernetes:
+      k8s-views-global:
+        gnetId: 15757
+        datasource: Prometheus
+      k8s-views-namespaces:
+        gnetId: 15758
+        datasource: Prometheus
+      k8s-views-nodes:
+        gnetId: 15759
+        datasource: Prometheus
+      k8s-views-pods:
+        gnetId: 15760
+        datasource: Prometheus
+      k8s-system-apiserver:
+        gnetId: 15761
+        datasource: Prometheus
+      k8s-system-coredns:
+        gnetId: 15762
+        datasource: Prometheus
+      prometheus-k8s-addon:
+        gnetId: 19105
+        datasource: Prometheus
+
   sidecar:
+    # 讓 sidecar 幫你自動載入 dashboards / datasources（包含外部 CM）
     dashboards:
       enabled: true
       searchNamespace: ALL
+      # 可用 annotation 指定儀表板資料夾
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
     datasources:
       enabled: true
 
-# AlertManager configuration
 alertmanager:
   alertmanagerSpec:
-    # Storage
     storage:
       volumeClaimTemplate:
         spec:
@@ -80,8 +107,6 @@ alertmanager:
           resources:
             requests:
               storage: 2Gi
-    
-    # Resources
     resources:
       limits:
         cpu: 100m
@@ -90,28 +115,21 @@ alertmanager:
         cpu: 25m
         memory: 64Mi
 
-# Node exporter
 nodeExporter:
   enabled: true
 
-# Kube state metrics
 kubeStateMetrics:
   enabled: true
 
-# Disable some components for lightweight setup
 kubeEtcd:
   enabled: false
-
 kubeControllerManager:
   enabled: false
-
 kubeScheduler:
   enabled: false
-
 kubeProxy:
   enabled: false
 
-# Service monitor for application metrics
 additionalServiceMonitors:
   - name: podinfo-monitor
     selector:
@@ -120,6 +138,6 @@ additionalServiceMonitors:
     namespaceSelector:
       any: true
     endpoints:
-    - port: http-metrics
-      interval: 15s
-      path: /metrics
+      - port: http-metrics
+        interval: 15s
+        path: /metrics

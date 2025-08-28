@@ -31,7 +31,9 @@ install-argocd: ## Install ArgoCD in the cluster
 	kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 	@echo "⏳ Waiting for ArgoCD to be ready..."
 	kubectl wait --for=condition=available --timeout=600s deployment/argocd-server -n argocd
-	@echo "✅ ArgoCD installed!"
+	@echo "🔍 Verifying ArgoCD installation..."
+	@make verify-argocd
+	@echo "✅ ArgoCD installed and verified!"
 	@echo "🔐 ArgoCD admin password:"
 	kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
 
@@ -39,12 +41,18 @@ install-argocd: ## Install ArgoCD in the cluster
 deploy-apps: ## Deploy applications via ArgoCD
 	@echo "🚢 Deploying applications..."
 	kubectl apply -f gitops/argocd/apps/
-	@echo "✅ Applications deployed!"
+	@echo "⏳ Waiting for applications to sync..."
+	@sleep 15
+	@make verify-apps
+	@echo "✅ Applications deployed and verified!"
 
 deploy-monitoring: ## Deploy monitoring stack
 	@echo "📊 Deploying monitoring stack..."
 	kubectl apply -f monitoring/kube-prometheus-stack/application.yaml
-	@echo "✅ Monitoring stack deployed!"
+	@echo "⏳ Waiting for monitoring stack to be ready..."
+	@sleep 30
+	@make verify-monitoring
+	@echo "✅ Monitoring stack deployed and verified!"
 
 # Local development
 dev-local-build: ## Build image for local registry
@@ -73,12 +81,12 @@ dev-local-release: dev-local-push dev-local-update dev-local-commit ## Full loca
 
 # Port forwarding
 port-forward-argocd: ## Port forward ArgoCD server
-	@echo "🌐 Port forwarding ArgoCD (http://localhost:8080)..."
-	kubectl port-forward svc/argocd-server -n argocd 8080:443
+	@echo "🌐 Port forwarding ArgoCD (http://localhost:8081)..."
+	kubectl port-forward svc/argocd-server -n argocd 8081:80
 
 port-forward-grafana: ## Port forward Grafana
-	@echo "🌐 Port forwarding Grafana (http://localhost:3000)..."
-	kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80
+	@echo "🌐 Port forwarding Grafana (http://localhost:3001)..."
+	kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3001:80
 
 port-forward-prometheus: ## Port forward Prometheus
 	@echo "🌐 Port forwarding Prometheus (http://localhost:9090)..."
@@ -98,9 +106,45 @@ port-forward-all: ## Port forward all services (run in background)
 	@make port-forward-grafana &
 	@make port-forward-prometheus &
 	@echo "✅ All services available:"
-	@echo "  - ArgoCD: http://localhost:8080"
-	@echo "  - Grafana: http://localhost:3000 (admin/admin123!@#)"
+	@echo "  - ArgoCD: http://localhost:8081"
+	@echo "  - Grafana: http://localhost:3001 (admin/prom-operator)"
 	@echo "  - Prometheus: http://localhost:9090"
+
+# Verification commands
+verify-argocd: ## Verify ArgoCD installation
+	@echo "🔍 Verifying ArgoCD installation..."
+	@echo "Checking ArgoCD pods..."
+	kubectl get pods -n argocd
+	@echo "Waiting for all ArgoCD pods to be ready..."
+	kubectl wait --for=condition=ready --timeout=300s pods --all -n argocd
+	@echo "✅ All ArgoCD pods are ready!"
+
+verify-monitoring: ## Verify monitoring stack deployment
+	@echo "🔍 Verifying monitoring stack..."
+	@echo "Checking ArgoCD application status..."
+	kubectl get application kube-prometheus-stack -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null | grep -q "Synced" || echo "⚠️  Application not synced yet"
+	@echo "Checking monitoring namespace..."
+	kubectl get ns monitoring 2>/dev/null || echo "⚠️  Monitoring namespace not found"
+	@echo "Checking monitoring pods..."
+	kubectl get pods -n monitoring 2>/dev/null || echo "⚠️  No monitoring pods found yet"
+	@echo "Checking Grafana dashboards ConfigMaps..."
+	kubectl get configmap -n monitoring | grep grafana | grep -E "(k8s-views|kubernetes)" || echo "⚠️  Custom dashboards not found yet"
+	@echo "✅ Monitoring verification complete!"
+
+redeploy-monitoring: ## Force redeploy monitoring stack with new configuration
+	@echo "🔄 Redeploying monitoring stack..."
+	kubectl delete application kube-prometheus-stack -n argocd --ignore-not-found=true
+	@sleep 10
+	kubectl apply -f monitoring/kube-prometheus-stack/application.yaml
+	@echo "✅ Monitoring stack redeployed! Wait for sync to complete."
+
+verify-apps: ## Verify application deployments
+	@echo "🔍 Verifying applications..."
+	@echo "ArgoCD Applications:"
+	kubectl get applications -n argocd
+	@echo "Application sync status:"
+	kubectl get applications -n argocd -o jsonpath='{range .items[*]}{.metadata.name}: {.status.sync.status}{"\n"}{end}' 2>/dev/null || echo "⚠️  No applications found"
+	@echo "✅ Application verification complete!"
 
 # Status and debugging
 status: ## Show cluster and application status
@@ -118,6 +162,31 @@ status: ## Show cluster and application status
 
 logs-argocd: ## Show ArgoCD server logs
 	kubectl logs -n argocd deployment/argocd-server --tail=50
+
+get-passwords: ## Get actual passwords for all services
+	@echo "🔐 Service Credentials:"
+	@echo "======================="
+	@echo "ArgoCD admin password:"
+	kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
+	@echo ""
+	@echo "Grafana credentials:"
+	@echo "Username: admin"
+	@echo "Password: $(kubectl get secret kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.data.admin-password}' | base64 -d)"
+
+setup-grafana-dashboards: ## Import modern Kubernetes dashboards to Grafana
+	@echo "📊 Setting up modern Grafana dashboards..."
+	@echo "Please manually import these recommended dashboards:"
+	@echo "1. Kubernetes Cluster Overview (ID: 7249)"
+	@echo "2. Kubernetes Pod Overview (ID: 6417)"
+	@echo "3. Node Exporter Full (ID: 1860)"
+	@echo "4. Prometheus Stats (ID: 2)"
+	@echo ""
+	@echo "To import:"
+	@echo "1. Open Grafana at http://localhost:3001"
+	@echo "2. Go to '+' -> Import"
+	@echo "3. Enter the Dashboard ID"
+	@echo "4. Select 'Prometheus' as data source"
+	@echo "✅ This avoids Angular deprecation warnings!"
 
 # Cleanup
 clean-apps: ## Delete all applications
@@ -153,5 +222,5 @@ quickstart: check-prereqs setup-cluster install-argocd deploy-apps deploy-monito
 	@echo "Next steps:"
 	@echo "1. Run 'make port-forward-all' to access services"
 	@echo "2. Run 'make dev-local-release' to deploy local changes"
-	@echo "3. Visit http://localhost:8080 for ArgoCD"
-	@echo "4. Visit http://localhost:3000 for Grafana (admin/admin123!@#)"
+	@echo "3. Visit http://localhost:8081 for ArgoCD"
+	@echo "4. Visit http://localhost:3001 for Grafana (admin/prom-operator)"

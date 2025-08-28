@@ -39,7 +39,7 @@ graph TB
     end
     
     subgraph "Kind 叢集"
-        ArgoCD[ArgoCD<br/>port 8080]
+        ArgoCD[ArgoCD<br/>port 8081]
         K8s[Kubernetes API]
         
         subgraph "demo-local namespace"
@@ -49,7 +49,7 @@ graph TB
         
         subgraph "monitoring namespace"
             Prom[Prometheus<br/>port 9090]
-            Graf[Grafana<br/>port 3000]
+            Graf[Grafana<br/>port 3001]
         end
     end
     
@@ -78,9 +78,9 @@ graph TB
 |------|------|---------|
 | Kind Cluster | 本地 K8s 環境 | `kubectl` |
 | Local Registry | 映像儲存庫 | `localhost:5001` |
-| ArgoCD | GitOps 控制器 | `http://localhost:8080` |
+| ArgoCD | GitOps 控制器 | `http://localhost:8081` |
 | Prometheus | 指標收集 | `http://localhost:9090` |
-| Grafana | 視覺化儀表板 | `http://localhost:3000` |
+| Grafana | 視覺化儀表板 | `http://localhost:3001` |
 | PodInfo | 示範應用 | `http://localhost:9898` |
 
 ---
@@ -160,8 +160,8 @@ docker ps --format "table {{.Names}}\t{{.Ports}}"
 
 # 重要端口映射
 # localhost:5001 -> Registry
-# localhost:8080 -> ArgoCD UI
-# localhost:3000 -> Grafana
+# localhost:8081 -> ArgoCD UI
+# localhost:3001 -> Grafana
 # localhost:9090 -> Prometheus
 ```
 
@@ -181,6 +181,10 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/st
 
 # 等待就緒
 kubectl wait --for=condition=available --timeout=600s deployment/argocd-server -n argocd
+
+# 驗證安裝
+kubectl wait --for=condition=ready --timeout=300s pods --all -n argocd
+kubectl get pods -n argocd
 
 # 取得密碼
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
@@ -202,6 +206,13 @@ make deploy-monitoring
 # 部署 kube-prometheus-stack
 kubectl apply -f monitoring/kube-prometheus-stack/application.yaml
 
+# 等待 ArgoCD 同步
+sleep 30
+
+# 驗證部署狀態
+kubectl get application kube-prometheus-stack -n argocd
+kubectl get pods -n monitoring
+
 # 包含組件：
 # - Prometheus Server
 # - Grafana
@@ -220,6 +231,13 @@ make deploy-apps
 ```bash
 # 部署 ArgoCD Applications
 kubectl apply -f gitops/argocd/apps/
+
+# 等待應用同步
+sleep 15
+
+# 驗證應用狀態
+kubectl get applications -n argocd
+kubectl get applications -n argocd -o jsonpath='{range .items[*]}{.metadata.name}: {.status.sync.status}{"\n"}{end}'
 
 # 建立的應用：
 # - podinfo-local: 使用本地 registry
@@ -348,7 +366,7 @@ kubectl describe application podinfo-local -n argocd
 
 # ArgoCD UI
 make port-forward-argocd
-# 開啟 http://localhost:8080
+# 開啟 http://localhost:8081
 ```
 
 ---
@@ -363,8 +381,8 @@ make port-forward-all
 ```
 
 服務端點：
-- **ArgoCD**: http://localhost:8080 (admin/密碼)
-- **Grafana**: http://localhost:3000 (admin/admin123!@#)
+- **ArgoCD**: http://localhost:8081 (admin/密碼)
+- **Grafana**: http://localhost:3001 (admin/prom-operator)
 - **Prometheus**: http://localhost:9090
 
 ### 2. ServiceMonitor 配置
@@ -397,13 +415,37 @@ curl -s http://localhost:9898/metrics | grep podinfo
 
 ### 4. Grafana 儀表板
 
-1. 登入 Grafana (admin/admin123!@#)
-2. 導入 Dashboard ID: 15760 (Kubernetes Cluster Overview)
-3. 建立自訂儀表板監控 podinfo
+1. 登入 Grafana (admin/prom-operator)
+2. **重要**: 預設儀表板已禁用以避免 Angular 廢棄警告
+3. 手動導入現代化儀表板：
+   ```bash
+   make setup-grafana-dashboards
+   ```
+4. 推薦的現代化儀表板：
+   - Kubernetes Cluster Overview (ID: 7249)
+   - Kubernetes Pod Overview (ID: 6417) 
+   - Node Exporter Full (ID: 1860)
+   - Prometheus Stats (ID: 2)
+5. 導入步驟：Dashboard → Import → 輸入 ID → 選擇 Prometheus 資料源
 
 ---
 
 ## 故障排除
+
+### 問題 0: Grafana 顯示 "This panel needs angular (deprecated)" 
+
+```bash
+# 這是因為使用了舊版 Angular 儀表板，解決方法：
+# 1. 預設儀表板已禁用（避免 Angular 廢棄警告）
+# 2. 使用現代化的 React 儀表板
+make setup-grafana-dashboards
+
+# 手動導入推薦的現代化儀表板
+# - Kubernetes Cluster Overview (ID: 7249)
+# - Kubernetes Pod Overview (ID: 6417)  
+# - Node Exporter Full (ID: 1860)
+# - Prometheus Stats (ID: 2)
+```
 
 ### 問題 1: 映像拉取失敗
 
@@ -584,8 +626,8 @@ make quickstart
 
 | 服務 | URL | 認證 |
 |------|-----|------|
-| ArgoCD | http://localhost:8080 | admin/[密碼] |
-| Grafana | http://localhost:3000 | admin/admin123!@# |
+| ArgoCD | http://localhost:8081 | admin/[密碼] |
+| Grafana | http://localhost:3001 | admin/prom-operator |
 | Prometheus | http://localhost:9090 | 無 |
 | PodInfo | http://localhost:9898 | 無 |
 
