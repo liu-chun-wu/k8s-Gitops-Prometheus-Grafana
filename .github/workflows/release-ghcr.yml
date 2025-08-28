@@ -65,7 +65,7 @@ jobs:
           
           # Update the image name and tag in kustomization.yaml
           yq -i '.images[0].newName = "ghcr.io/${{ github.repository }}/podinfo"' k8s/podinfo/overlays/dev-ghcr/kustomization.yaml
-          yq -i '.images[0].newTag = "${{ github.sha }}"' k8s/podinfo/overlays/dev-ghcr/kustomization.yaml
+          yq -i ".images[0].newTag = \"main-$(echo ${{ github.sha }} | cut -c1-7)\"" k8s/podinfo/overlays/dev-ghcr/kustomization.yaml
           
           # Configure git
           git config user.name "github-actions[bot]"
