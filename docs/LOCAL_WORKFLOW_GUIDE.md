@@ -368,7 +368,7 @@ kubectl describe application podinfo-local -n argocd
 make port-forward-argocd
 # 開啟 http://localhost:8081
 ```
-
+123
 ---
 
 ## 監控與觀測
