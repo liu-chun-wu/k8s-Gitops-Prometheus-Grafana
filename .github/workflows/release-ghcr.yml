@@ -63,7 +63,8 @@ jobs:
             sudo chmod +x /usr/local/bin/yq
           fi
           
-          # Update the image tag in kustomization.yaml
+          # Update the image name and tag in kustomization.yaml
+          yq -i '.images[0].newName = "ghcr.io/${{ github.repository }}/podinfo"' k8s/podinfo/overlays/dev-ghcr/kustomization.yaml
           yq -i '.images[0].newTag = "${{ github.sha }}"' k8s/podinfo/overlays/dev-ghcr/kustomization.yaml
           
           # Configure git
