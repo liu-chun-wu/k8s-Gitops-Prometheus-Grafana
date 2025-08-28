@@ -7,8 +7,8 @@ resources:
   - namespace.yaml
 images:
   - name: ghcr.io/stefanprodan/podinfo
-    newName: ghcr.io/liu-chun-wu/k8s-gitops-prometheus-grafana/podinfo
-    newTag: 54044e9110f480c985e4348c3359744a26ca3bea
+    newName: ghcr.io/liu-chun-wu/k8s-Gitops-Prometheus-Grafana/podinfo
+    newTag: b9886462959bdfb9f7be4a9414a120917bb65605
 patches:
   - target:
       kind: Deployment
