@@ -8,7 +8,7 @@ resources:
 images:
   - name: ghcr.io/stefanprodan/podinfo
     newName: ghcr.io/liu-chun-wu/k8s-gitops-prometheus-grafana/podinfo
-    newTag: main-4ba6eef
+    newTag: main-c3cf050
 patches:
   - target:
       kind: Deployment
