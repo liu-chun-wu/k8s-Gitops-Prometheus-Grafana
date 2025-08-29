@@ -37,6 +37,36 @@ install-argocd: ## Install ArgoCD in the cluster
 	@echo "🔐 ArgoCD admin password:"
 	kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
 
+# Ingress setup
+install-ingress: ## Install NGINX Ingress Controller for Kind
+	@echo "🌐 Installing NGINX Ingress Controller..."
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+	@echo "⏳ Waiting for Ingress Controller to be ready..."
+	@sleep 30
+	kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s || true
+	@echo "✅ Ingress Controller installed!"
+
+setup-argocd-ingress: ## Setup ArgoCD with Ingress (no port-forward needed)
+	@echo "🔧 Configuring ArgoCD for Ingress access..."
+	@echo "Setting ArgoCD to insecure mode..."
+	kubectl apply -f ingress/argocd/argocd-cmd-params-cm-patch.yaml || kubectl patch configmap argocd-cmd-params-cm -n argocd --patch-file ingress/argocd/argocd-cmd-params-cm-patch.yaml
+	kubectl rollout restart deployment argocd-server -n argocd
+	@sleep 10
+	@echo "Creating ArgoCD Ingress..."
+	kubectl apply -f ingress/argocd/argocd-ingress.yaml
+	@echo "✅ ArgoCD Ingress configured!"
+	@echo ""
+	@echo "📝 Add this line to /etc/hosts:"
+	@echo "127.0.0.1 argocd.local"
+	@echo ""
+	@echo "Then access ArgoCD at: http://argocd.local"
+
+setup-hosts: ## Show /etc/hosts configuration for Ingress
+	@echo "📝 Add these lines to /etc/hosts:"
+	@echo "127.0.0.1 argocd.local"
+	@echo ""
+	@echo "Run: sudo sh -c 'echo \"127.0.0.1 argocd.local\" >> /etc/hosts'"
+
 # Application deployment
 deploy-apps: ## Deploy all applications (both local and ghcr)
 	@echo "🚢 Deploying all applications..."
