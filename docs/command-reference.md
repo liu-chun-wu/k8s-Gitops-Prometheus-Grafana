@@ -15,6 +15,7 @@
 | 命令 | 說明 | 用法 |
 |------|------|------|
 | `dev` | 構建、推送、部署本地變更 | `make dev` |
+| `update` | 完整 Git 工作流程（sync+commit+push） | `make update MSG="your message"` |
 | `sync` | 同步遠端倉庫 | `make sync` |
 | `commit` | 提交所有變更 | `make commit MSG="your message"` |
 | `push` | 推送到遠端 | `make push` |
@@ -72,10 +73,10 @@ make status
 
 ### Git 工作流程
 ```bash
-# 提交並推送
-make commit MSG="feat: add new feature"
+# 方式一：使用整合指令（推薦）
+make update MSG="feat: add new feature"
 
-# 或分開執行
+# 方式二：分步執行
 make sync          # 拉取最新
 make commit MSG="fix: bug fix"
 make push          # 推送變更
@@ -131,9 +132,12 @@ make commit MSG="feat: implement user authentication"
 # 完整重新部署
 make clean quickstart
 
+# 開發並提交
+make dev && make update MSG="feat: implement feature"
+
 # 更新並檢查
 make dev status
 
-# 提交並同步
-make commit MSG="update" push
+# 快速提交所有變更
+make update MSG="update"
 ```

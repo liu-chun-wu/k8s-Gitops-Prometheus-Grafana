@@ -13,6 +13,9 @@ make dev
 
 # 3. 檢查狀態
 make status
+
+# 4. 提交所有變更（可選）
+make update MSG="feat: implement new feature"
 ```
 
 ### 手動步驟
@@ -41,20 +44,26 @@ make commit MSG="feat: update podinfo"
 ## Git 工作流程
 
 ### 提交變更
-```bash
-# 方式一：使用 make
-make commit MSG="fix: resolve issue"
 
-# 方式二：手動
+#### 方式一：整合指令（推薦）
+```bash
+# 一次完成 sync + commit + push
+make update MSG="fix: resolve issue"
+```
+
+#### 方式二：分步控制
+```bash
+# 使用獨立命令
+make sync                    # 拉取最新變更
+make commit MSG="fix: issue" # 提交變更
+make push                    # 推送到遠端
+```
+
+#### 方式三：手動操作
+```bash
 git add -A
 git commit -m "fix: resolve issue"
 git push origin main
-```
-
-### 同步遠端
-```bash
-make sync  # 拉取最新變更
-make push  # 推送本地變更
 ```
 
 ## 測試驗證

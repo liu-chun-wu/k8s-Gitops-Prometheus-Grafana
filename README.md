@@ -81,6 +81,7 @@ make access
 | `make setup` | 📦 創建叢集和 ArgoCD |
 | `make deploy` | 🚢 部署所有應用 |
 | `make dev` | 🔧 本地開發發布 |
+| `make update MSG="msg"` | 🚀 完整 Git 工作流程 |
 | `make commit MSG="msg"` | 💾 提交變更 |
 | `make forward` | 🔌 Port-forward 服務 |
 | `make ingress` | 🌍 設置 Ingress 訪問 |
@@ -98,8 +99,8 @@ vim Dockerfile
 # 2. 一鍵構建、推送、部署
 make dev
 
-# 3. 提交變更
-make commit MSG="feat: add new feature"
+# 3. 提交並推送所有變更（整合 Git 工作流程）
+make update MSG="feat: add new feature"
 ```
 
 ## 🌐 服務訪問方式

@@ -11,6 +11,7 @@ MSG ?= "Update"
 CYAN := \033[36m
 GREEN := \033[32m
 YELLOW := \033[33m
+RED := \033[31m
 RESET := \033[0m
 
 #=============================================================================
@@ -24,7 +25,7 @@ help: ## Show this help message
 	@grep -E '^(quickstart|setup|deploy|access|clean):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-18s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Development:$(RESET)"
-	@grep -E '^(dev|sync|commit|push):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-18s$(RESET) %s\n", $$1, $$2}'
+	@grep -E '^(dev|sync|commit|push|update):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-18s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "$(GREEN)Services:$(RESET)"
 	@grep -E '^(forward|ingress|passwords):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-18s$(RESET) %s\n", $$1, $$2}'
@@ -35,7 +36,7 @@ help: ## Show this help message
 	@echo "$(YELLOW)Usage Examples:$(RESET)"
 	@echo "  make quickstart        # 完整環境設置"
 	@echo "  make dev              # 本地開發發布"
-	@echo "  make commit MSG=\"fix\" # 提交變更"
+	@echo "  make update MSG=\"fix\" # 完整 Git 工作流程"
 
 #=============================================================================
 # QUICK START
@@ -117,6 +118,20 @@ push: ## 📤 Push to remote with auto-merge
 	@git pull --no-rebase origin main
 	@git push origin main
 	@echo "$(GREEN)✅ Push complete!$(RESET)"
+
+update: ## 🚀 Complete git workflow: sync, commit, and push (usage: make update MSG="your message")
+	@echo "$(CYAN)Starting complete git workflow...$(RESET)"
+	@echo "$(CYAN)Step 1: Syncing with remote...$(RESET)"
+	@git pull --no-rebase origin main || echo "$(YELLOW)⚠️  Sync failed - continuing anyway$(RESET)"
+	@echo "$(CYAN)Step 2: Adding all changes...$(RESET)"
+	@git add -A
+	@echo "$(CYAN)Step 3: Committing with message: $(MSG)$(RESET)"
+	@git commit -m "$(MSG)" || echo "$(YELLOW)No changes to commit$(RESET)"
+	@echo "$(CYAN)Step 4: Final sync before push...$(RESET)"
+	@git pull --no-rebase origin main || echo "$(YELLOW)⚠️  Merge may be needed$(RESET)"
+	@echo "$(CYAN)Step 5: Pushing to remote...$(RESET)"
+	@git push origin main || { echo "$(RED)❌ Push failed - please resolve conflicts$(RESET)"; exit 1; }
+	@echo "$(GREEN)✅ Complete workflow successful!$(RESET)"
 
 #=============================================================================
 # SERVICES
