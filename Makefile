@@ -274,17 +274,35 @@ registry-test: ## Test local registry connectivity
 	@echo "✅ Registry test passed!"
 
 # Git management
-git-sync: ## Sync with remote repository (pull with rebase)
+git-sync: ## Sync with remote repository (pull without rebase)
 	@echo "🔄 Syncing with remote repository..."
-	@git pull --rebase origin main || echo "⚠️  Sync failed - may need manual intervention"
+	@git pull --no-rebase origin main || echo "⚠️  Sync failed - may need manual intervention"
 	@echo "✅ Sync complete!"
 
-push: ## Safe push with automatic rebase
+commit: ## Add all changes and commit with message (usage: make commit MSG="your message")
+	@echo "💾 Committing changes..."
+	@git add -A
+	@git commit -m "$(MSG)" || echo "No changes to commit"
+	@echo "✅ Changes committed!"
+
+push: ## Safe push with automatic merge
 	@echo "🔄 Pulling latest changes..."
-	@git pull --rebase origin main || { echo "❌ Pull failed - resolve conflicts manually"; exit 1; }
+	@git pull --no-rebase origin main || { echo "❌ Pull failed - check for conflicts"; exit 1; }
 	@echo "📤 Pushing to remote..."
 	@git push origin main || { echo "❌ Push failed - check your changes"; exit 1; }
 	@echo "✅ Push complete!"
+
+git-commit-push: ## All-in-one: add, commit, sync, and push (usage: make git-commit-push MSG="your message")
+	@echo "🚀 Starting git workflow..."
+	@echo "📝 Adding all changes..."
+	@git add -A
+	@echo "💾 Committing with message: $(MSG)"
+	@git commit -m "$(MSG)" || echo "No changes to commit"
+	@echo "🔄 Syncing with remote..."
+	@git pull --no-rebase origin main || echo "⚠️  Merge may be needed"
+	@echo "📤 Pushing to remote..."
+	@git push origin main || { echo "❌ Push failed - run 'make push' later"; exit 1; }
+	@echo "✅ All done!"
 
 # Quick start
 quickstart: check-prereqs setup-cluster install-argocd deploy-apps deploy-monitoring ## Full setup from scratch
