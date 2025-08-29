@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo-local
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/liu-chun-wu/k8s-Gitops-Prometheus-Grafana.git
+    path: k8s/podinfo/overlays/dev-local
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: demo-local
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

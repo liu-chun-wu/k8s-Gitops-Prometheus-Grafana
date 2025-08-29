@@ -38,13 +38,39 @@ install-argocd: ## Install ArgoCD in the cluster
 	kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
 
 # Application deployment
-deploy-apps: ## Deploy applications via ArgoCD
-	@echo "🚢 Deploying applications..."
+deploy-apps: ## Deploy all applications (both local and ghcr)
+	@echo "🚢 Deploying all applications..."
 	kubectl apply -f gitops/argocd/apps/
 	@echo "⏳ Waiting for applications to sync..."
 	@sleep 15
 	@make verify-apps
-	@echo "✅ Applications deployed and verified!"
+	@echo "✅ All applications deployed and verified!"
+
+deploy-local: ## Deploy only local podinfo application
+	@echo "🚢 Deploying local podinfo application..."
+	kubectl apply -f gitops/argocd/apps/podinfo-local.yaml
+	@echo "⏳ Waiting for application to sync..."
+	@sleep 10
+	kubectl get application podinfo-local -n argocd
+	@echo "✅ Local podinfo deployed!"
+
+deploy-ghcr: ## Deploy only ghcr podinfo application
+	@echo "🚢 Deploying ghcr podinfo application..."
+	kubectl apply -f gitops/argocd/apps/podinfo-ghcr.yaml
+	@echo "⏳ Waiting for application to sync..."
+	@sleep 10
+	kubectl get application podinfo-ghcr -n argocd
+	@echo "✅ GHCR podinfo deployed!"
+
+delete-local: ## Delete local podinfo application
+	@echo "🗑️ Deleting local podinfo application..."
+	kubectl delete application podinfo-local -n argocd --ignore-not-found=true
+	@echo "✅ Local podinfo deleted!"
+
+delete-ghcr: ## Delete ghcr podinfo application
+	@echo "🗑️ Deleting ghcr podinfo application..."
+	kubectl delete application podinfo-ghcr -n argocd --ignore-not-found=true
+	@echo "✅ GHCR podinfo deleted!"
 
 deploy-monitoring: ## Deploy monitoring stack
 	@echo "📊 Deploying monitoring stack..."
