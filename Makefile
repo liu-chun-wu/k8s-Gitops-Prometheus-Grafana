@@ -70,11 +70,14 @@ dev-local-update: ## Update kustomize overlay with new tag
 	yq -i '.images[0].newTag = "dev-$(SHA)"' k8s/podinfo/overlays/dev-local/kustomization.yaml
 	@echo "✅ Kustomization updated with tag: dev-$(SHA)"
 
-dev-local-commit: ## Commit the changes to git
+dev-local-commit: ## Commit and push changes to git
 	@echo "💾 Committing changes..."
-	git add k8s/podinfo/overlays/dev-local/kustomization.yaml
-	git commit -m "chore(local): bump image tag to dev-$(SHA)" || echo "No changes to commit"
-	@echo "✅ Changes committed!"
+	@git add k8s/podinfo/overlays/dev-local/kustomization.yaml
+	@git commit -m "chore(local): bump image tag to dev-$(SHA)" || echo "No changes to commit"
+	@echo "🔄 Syncing with remote..."
+	@git pull --rebase origin main || echo "⚠️  Pull failed - manual sync may be needed"
+	@git push origin main || echo "⚠️  Push failed - run 'make push' later"
+	@echo "✅ Changes committed and synced!"
 
 dev-local-release: dev-local-push dev-local-update dev-local-commit ## Full local development release
 	@echo "🎉 Local release complete! Tag: dev-$(SHA)"
@@ -213,6 +216,19 @@ registry-test: ## Test local registry connectivity
 	docker tag busybox:latest localhost:$(REGISTRY_PORT)/test:$(TIMESTAMP)
 	docker push localhost:$(REGISTRY_PORT)/test:$(TIMESTAMP)
 	@echo "✅ Registry test passed!"
+
+# Git management
+git-sync: ## Sync with remote repository (pull with rebase)
+	@echo "🔄 Syncing with remote repository..."
+	@git pull --rebase origin main || echo "⚠️  Sync failed - may need manual intervention"
+	@echo "✅ Sync complete!"
+
+push: ## Safe push with automatic rebase
+	@echo "🔄 Pulling latest changes..."
+	@git pull --rebase origin main || { echo "❌ Pull failed - resolve conflicts manually"; exit 1; }
+	@echo "📤 Pushing to remote..."
+	@git push origin main || { echo "❌ Push failed - check your changes"; exit 1; }
+	@echo "✅ Push complete!"
 
 # Quick start
 quickstart: check-prereqs setup-cluster install-argocd deploy-apps deploy-monitoring ## Full setup from scratch
