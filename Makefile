@@ -224,6 +224,3 @@ quickstart: check-prereqs setup-cluster install-argocd deploy-apps deploy-monito
 	@echo "2. Run 'make dev-local-release' to deploy local changes"
 	@echo "3. Visit http://localhost:8081 for ArgoCD"
 	@echo "4. Visit http://localhost:3001 for Grafana (admin/prom-operator)"
-
-
-123

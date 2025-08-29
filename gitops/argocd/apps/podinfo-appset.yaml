@@ -7,11 +7,11 @@ spec:
   generators:
     - list:
         elements:
-          - env: dev-local
+          - env: local
             ns: demo-local
             path: k8s/podinfo/overlays/dev-local
             color: green
-          - env: dev-ghcr
+          - env: ghcr
             ns: demo-ghcr
             path: k8s/podinfo/overlays/dev-ghcr
             color: blue
