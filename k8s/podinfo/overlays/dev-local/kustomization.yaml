@@ -8,7 +8,7 @@ resources:
 images:
   - name: ghcr.io/stefanprodan/podinfo
     newName: localhost:5001/podinfo
-    newTag: dev-df9d0d1
+    newTag: dev-ecd0bfe
 patches:
   - target:
       kind: Deployment
