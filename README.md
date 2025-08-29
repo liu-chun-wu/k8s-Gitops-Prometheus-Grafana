@@ -1,102 +1,120 @@
-# K8s GitOps + Prometheus + Grafana 示範專案
+# K8s GitOps Demo with Prometheus & Grafana
 
-一個完整的 GitOps 示範專案，使用 Kubernetes、ArgoCD、Prometheus 和 Grafana，同時支援本地開發與雲端 CI/CD 工作流程。
+一個完整的 GitOps 示範專案，展示如何使用 Kubernetes、ArgoCD、Prometheus 和 Grafana 建立現代化的雲原生應用部署與監控系統。
 
 ## 🚀 快速開始
 
 ```bash
-# 檢查先決條件
+# 1. 檢查環境
 make check-prereqs
 
-# 完整設定（5 分鐘）
+# 2. 一鍵設置完整環境（約 5 分鐘）
 make quickstart
 
-# 存取服務
-make port-forward-all
+# 3. 訪問服務
+# ArgoCD: http://argocd.local (需要配置 /etc/hosts)
+# Grafana: http://localhost:3001 (admin/prom-operator)
+# Prometheus: http://localhost:9090
 ```
 
-**服務存取點：**
-- ArgoCD: http://localhost:8080 (admin 密碼從叢集取得)
-- Grafana: http://localhost:3000 (admin/admin123!@#)
-- Prometheus: http://localhost:9090
+## 📚 文檔結構
 
-## ✨ 功能特色
+### 入門指南
+- [前置需求](docs/getting-started/prerequisites.md) - 環境準備
+- [快速開始](docs/getting-started/quickstart.md) - 5 分鐘上手
+- [系統架構](docs/getting-started/architecture.md) - 架構說明
 
-- **雙 Registry 支援**：本地 registry (localhost:5001) + GitHub Container Registry (GHCR)
-- **GitOps 工作流程**：ArgoCD 以 Git 作為唯一真相來源管理部署
-- **完整監控系統**：Prometheus + Grafana + AlertManager 技術堆疊
-- **快速迭代開發**：本地開發環境具備自動映像建置與部署
-- **CI/CD Pipeline**：GitHub Actions 自動建置與部署
-- **正式環境就緒**：包含監控、日誌與安全最佳實務
+### 開發工作流程
 
-## 📁 專案結構
+#### 本地開發（推薦新手）
+- [環境設置](docs/workflows/local/setup.md) - 設置 Kind + 本地 Registry
+- [開發流程](docs/workflows/local/development.md) - 快速迭代開發
+- [故障排除](docs/workflows/local/troubleshooting.md) - 常見問題解決
+
+#### GHCR/生產環境
+- [GHCR 設置](docs/workflows/ghcr/setup.md) - GitHub Container Registry 配置
+- [CI/CD 流程](docs/workflows/ghcr/ci-cd.md) - GitHub Actions 自動化
+- [故障排除](docs/workflows/ghcr/troubleshooting.md) - CI/CD 問題解決
+
+### 運維操作
+- [監控系統](docs/operations/monitoring.md) - Prometheus + Grafana
+- [Ingress 配置](docs/operations/ingress.md) - 免 Port-forward 訪問
+- [清理指南](docs/operations/cleanup.md) - 資源清理
+- [維護操作](docs/operations/maintenance.md) - 日常維護
+
+### 參考資料
+- [Makefile 命令](docs/reference/makefile-commands.md) - 所有可用命令
+- [目錄結構](docs/reference/directory-structure.md) - 專案結構說明
+- [最佳實踐](docs/reference/best-practices.md) - GitOps 最佳實踐
+
+## ✨ 核心特性
+
+- **雙 Registry 支援**：本地開發（localhost:5001）+ 生產環境（GHCR）
+- **完整 GitOps**：ArgoCD 自動同步，Git 作為唯一真實來源
+- **內建監控**：Prometheus + Grafana + ServiceMonitor
+- **零配置 Ingress**：預配置好的 Ingress 規則
+- **一鍵操作**：豐富的 Makefile 命令
+
+## 🏗️ 專案結構
 
 ```
-k8s-gitops-prometheus-grafana/
-├── clusters/kind/           # Kind 叢集設定檔
-├── gitops/argocd/          # ArgoCD 應用程式
-├── k8s/podinfo/            # Kustomize base + overlays
-├── monitoring/             # Prometheus/Grafana 設定檔
-├── .github/workflows/      # CI/CD pipelines
-└── Makefile               # 自動化指令
+.
+├── clusters/          # Kind 叢集配置
+├── gitops/           # ArgoCD 應用定義
+├── k8s/              # Kubernetes 資源
+│   └── podinfo/      # 示範應用
+│       ├── base/     # 基礎資源
+│       └── overlays/ # 環境覆寫
+├── monitoring/       # 監控系統配置
+├── ingress/          # Ingress 資源
+└── docs/            # 完整文檔
 ```
 
-## 🔄 開發工作流程
+## 🛠️ 常用命令
+
+| 命令 | 說明 |
+|------|------|
+| `make quickstart` | 完整環境設置 |
+| `make dev-local-release` | 本地開發發布 |
+| `make deploy-local` | 部署本地版本 |
+| `make deploy-ghcr` | 部署 GHCR 版本 |
+| `make status` | 查看系統狀態 |
+| `make clean` | 清理所有資源 |
+
+查看所有命令：`make help`
+
+## 🔧 開發流程
 
 ### 本地開發（快速迭代）
 ```bash
-# 修改程式碼
-make dev-local-release      # 建置 → 推送 → 更新 → 提交 → ArgoCD 同步
+# 1. 修改代碼
+# 2. 一鍵發布
+make dev-local-release
+# 3. 自動同步到叢集
 ```
 
-### 雲端 CI/CD（正式環境）
+### 生產部署（自動化）
 ```bash
-git push origin main        # 觸發 GitHub Actions → GHCR → Git 更新 → ArgoCD 同步
+# 1. Push 到 main 分支
+git push origin main
+# 2. GitHub Actions 自動構建並部署
+# 3. ArgoCD 自動同步
 ```
 
-## 📊 監控系統
+## 📊 監控面板
 
-- **Prometheus**：指標收集，30 天保留期限
-- **Grafana**：視覺化儀表板，含自定義 podinfo 指標
-- **AlertManager**：告警路由與管理
-- **ServiceMonitor**：自動指標發現
+- **Grafana**: 預配置的 Kubernetes 儀表板
+- **Prometheus**: 指標收集與查詢
+- **AlertManager**: 告警管理（可選）
 
-## 🛠️ 可用指令
+## 🤝 貢獻
 
-```bash
-make help                   # 顯示所有可用指令
-make setup-cluster         # 建立 kind 叢集與 registry
-make install-argocd        # 安裝 ArgoCD
-make deploy-apps           # 部署應用程式
-make deploy-monitoring     # 部署監控技術堆疊
-make dev-local-release     # 本地開發發布
-make port-forward-all      # 存取所有服務
-make status               # 顯示叢集狀態
-make clean                # 完整清理
-```
+歡迎提交 Issue 和 Pull Request！
 
-## 📚 文件
+## 📄 授權
 
-- [快速開始指南](docs/QUICKSTART.md)
-- [開發指南](k8s-gitops-prometheus-grafana-DEV.md)
+MIT License
 
-## 🔧 先決條件
+---
 
-- Docker
-- kind
-- kubectl
-- helm
-- yq
-- git
-
-## 🏗️ 架構說明
-
-此專案示範了完整的 GitOps 工作流程：
-
-1. **本地開發**：使用 kind + 本地 registry 實現快速迭代
-2. **基於 Git 的部署**：所有變更都在 Git 中追蹤
-3. **自動化同步**：ArgoCD 監控 Git 並同步叢集狀態
-4. **完整監控系統**：全方位可觀測性技術堆疊
-5. **CI/CD 整合**：自動化建置與部署
-
-非常適合學習 Kubernetes、GitOps 以及現代 DevOps 實務！
+**快速連結**：[本地開發](docs/workflows/local/setup.md) | [GHCR 部署](docs/workflows/ghcr/setup.md) | [問題排除](docs/workflows/local/troubleshooting.md) | [Makefile 命令](docs/reference/makefile-commands.md)
