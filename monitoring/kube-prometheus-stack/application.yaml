@@ -39,6 +39,9 @@ spec:
             nodePort: 30090
 
         grafana:
+          adminUser: admin
+          adminPassword: admin123
+          
           persistence:
             enabled: true
             storageClassName: standard

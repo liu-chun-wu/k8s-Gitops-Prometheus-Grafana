@@ -65,22 +65,46 @@ docker ps | grep kind-registry
 make install-argocd
 ```
 
-取得 admin 密碼：
+### Step 3: 設置 Ingress 和固定密碼
+
+#### 3.1 安裝 NGINX Ingress Controller
+
 ```bash
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+# 安裝 Ingress Controller
+make install-ingress
 ```
 
-### Step 3: 設置 Ingress (可選)
+#### 3.2 配置 ArgoCD Ingress
 
 ```bash
-make install-ingress
+# 設置 ArgoCD Ingress
 make setup-argocd-ingress
 ```
+
+#### 3.3 設定固定密碼（開發環境專用）
+
+```bash
+# 應用固定密碼配置
+kubectl apply -f gitops/argocd/argocd-secret.yaml
+
+# 重啟 ArgoCD Server 使密碼生效
+kubectl rollout restart deployment argocd-server -n argocd
+```
+
+#### 3.4 配置本地 DNS
 
 添加 hosts 記錄：
 ```bash
 sudo sh -c 'echo "127.0.0.1 argocd.local" >> /etc/hosts'
 ```
+
+#### 3.5 訪問 ArgoCD
+
+- URL: http://argocd.local
+- 用戶名: admin
+- 密碼: admin123
+
+> ⚠️ **安全提示**：固定密碼僅適用於開發環境，生產環境請使用 Secret 管理工具
 
 ### Step 4: 部署監控系統
 
@@ -111,14 +135,19 @@ make registry-test
 ## 訪問服務
 
 ### 使用 Ingress (推薦)
-- ArgoCD: http://argocd.local
-- Grafana: http://localhost:3001
+- ArgoCD: http://argocd.local (admin/admin123)
+- Grafana: http://localhost:3001 (admin/admin123)
 - Prometheus: http://localhost:9090
 
-### 使用 Port Forward
+### 使用 Port Forward (備選)
 ```bash
 make port-forward-all
 ```
+
+服務將可在以下位置訪問：
+- ArgoCD: http://localhost:8080 (admin/admin123)
+- Grafana: http://localhost:3001 (admin/admin123)
+- Prometheus: http://localhost:9090
 
 ## 下一步
 

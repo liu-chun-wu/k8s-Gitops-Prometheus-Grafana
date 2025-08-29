@@ -24,23 +24,35 @@ make check-prereqs
    This will:
    - Create a kind cluster with local registry
    - Install ArgoCD
+   - Install NGINX Ingress Controller
    - Deploy applications
    - Deploy monitoring stack
 
-2. **Access services:**
+2. **Setup Ingress access (recommended):**
+   ```bash
+   # Setup ArgoCD Ingress and apply fixed password
+   make setup-argocd-ingress
+   kubectl apply -f gitops/argocd/argocd-secret.yaml
+   kubectl rollout restart deployment argocd-server -n argocd
+   
+   # Add to /etc/hosts
+   sudo sh -c 'echo "127.0.0.1 argocd.local" >> /etc/hosts'
+   ```
+
+3. **Access services:**
+   
+   **Via Ingress (recommended):**
+   - ArgoCD: http://argocd.local (admin/admin123)
+   - Grafana: http://localhost:3001 (admin/admin123)
+   - Prometheus: http://localhost:9090
+   
+   **Via Port-forward (alternative):**
    ```bash
    make port-forward-all
    ```
-   
-   Available services:
-   - ArgoCD: http://localhost:8080
-   - Grafana: http://localhost:3000 (admin/admin123!@#)
+   - ArgoCD: http://localhost:8080 (admin/admin123)
+   - Grafana: http://localhost:3000 (admin/admin123)
    - Prometheus: http://localhost:9090
-
-3. **Get ArgoCD password:**
-   ```bash
-   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
-   ```
 
 ## Local Development Workflow
 
@@ -73,13 +85,20 @@ make setup-cluster
 kubectl get nodes
 ```
 
-### 2. ArgoCD Installation
+### 2. ArgoCD Installation with Ingress
 ```bash
 # Install ArgoCD
 make install-argocd
 
-# Port forward ArgoCD
-make port-forward-argocd
+# Install Ingress and configure ArgoCD access
+make install-ingress
+make setup-argocd-ingress
+
+# Apply fixed password for dev environment
+kubectl apply -f gitops/argocd/argocd-secret.yaml
+kubectl rollout restart deployment argocd-server -n argocd
+
+# Access via http://argocd.local (admin/admin123)
 ```
 
 ### 3. Deploy Applications

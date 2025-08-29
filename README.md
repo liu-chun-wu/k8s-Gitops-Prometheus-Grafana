@@ -12,8 +12,8 @@ make check-prereqs
 make quickstart
 
 # 3. 訪問服務
-# ArgoCD: http://argocd.local (需要配置 /etc/hosts)
-# Grafana: http://localhost:3001 (admin/prom-operator)
+# ArgoCD: http://argocd.local (admin/admin123) - 需要配置 /etc/hosts
+# Grafana: http://localhost:3001 (admin/admin123)
 # Prometheus: http://localhost:9090
 ```
 
@@ -46,6 +46,13 @@ make quickstart
 - [Makefile 命令](docs/reference/makefile-commands.md) - 所有可用命令
 - [目錄結構](docs/reference/directory-structure.md) - 專案結構說明
 - [最佳實踐](docs/reference/best-practices.md) - GitOps 最佳實踐
+
+## ⚠️ 安全提示
+
+**重要**：本專案為開發/測試環境配置了固定密碼，請勿在生產環境使用！
+- ArgoCD 默認密碼：admin / admin123
+- Grafana 默認密碼：admin / admin123
+- 生產環境請使用 Secret 管理工具（如 Sealed Secrets, External Secrets）
 
 ## ✨ 核心特性
 

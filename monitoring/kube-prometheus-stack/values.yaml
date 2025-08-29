@@ -23,7 +23,10 @@ prometheus:
         memory: 512Mi
 
 grafana:
-  # ✅ 安全：改用既有 Secret，不把密碼寫進 repo
+  # 設定固定密碼（僅適用於開發/測試環境）
+  adminUser: admin
+  adminPassword: admin123
+  
   persistence:
     enabled: true
     storageClassName: standard
