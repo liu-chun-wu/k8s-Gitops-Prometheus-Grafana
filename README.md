@@ -17,14 +17,25 @@ brew install kind kubectl git
 
 ## 🚀 快速開始
 
-```bash
-# 1. 一鍵設置完整環境（約 5 分鐘）
-make quickstart
+### 選擇部署模式
 
-# 2. 配置本地 DNS
+```bash
+# 方式一：互動式選擇（推薦）
+make quickstart
+# 系統會提示選擇：
+# 1) Local - 本地開發（含 local registry）
+# 2) GHCR - 生產環境（使用 GitHub Container Registry）
+# 3) Both - 完整環境（同時支援兩種模式）
+
+# 方式二：直接指定模式
+make quickstart-local  # 本地開發環境
+make quickstart-ghcr   # GHCR 生產環境
+make quickstart-both   # 完整環境
+
+# 配置本地 DNS
 sudo sh -c 'echo "127.0.0.1 argocd.local" >> /etc/hosts'
 
-# 3. 查看訪問資訊
+# 查看訪問資訊
 make access
 ```
 
@@ -50,7 +61,13 @@ make access
 
 ## ✨ 核心特性
 
-- **雙 Registry 支援**：本地開發（localhost:5001）+ 生產環境（GHCR）
+- **靈活的部署模式**：
+  - **Local Mode**：使用本地 registry (localhost:5001)，適合離線開發
+  - **GHCR Mode**：使用 GitHub Container Registry，適合生產環境
+    - 支援公開映像（無需認證）
+    - 支援私有映像（需設置 secret）
+  - **Both Mode**：同時支援兩種模式，最大靈活性
+- **智慧環境設置**：根據選擇的模式自動配置對應的基礎設施
 - **完整 GitOps**：ArgoCD 自動同步，Git 作為唯一真實來源
 - **內建監控**：Prometheus + Grafana + ServiceMonitor
 - **Ingress 訪問**：NGINX Ingress Controller，無需 Port Forward
@@ -77,8 +94,12 @@ make access
 
 | 命令 | 說明 |
 |------|------|
-| `make quickstart` | 🚀 完整環境設置（含 Ingress） |
-| `make setup` | 📦 創建叢集和 ArgoCD |
+| `make quickstart` | 🚀 互動式選擇部署模式 |
+| `make quickstart-local` | 🏠 本地開發環境（含 registry） |
+| `make quickstart-ghcr` | ☁️ GHCR 生產環境 |
+| `make quickstart-both` | 🔄 完整環境（local + GHCR） |
+| `make setup-local` | 📦 創建叢集（含 local registry） |
+| `make setup-ghcr` | 📦 創建叢集（僅 GHCR） |
 | `make deploy` | 🚢 部署所有應用 |
 | `make dev` | 🔧 本地開發發布 |
 | `make update MSG="msg"` | 🚀 完整 Git 工作流程 |
@@ -92,12 +113,28 @@ make access
 
 ## 🔧 開發流程
 
+### 本地開發模式
 ```bash
+# 使用本地 registry (需先執行 make setup-local)
 # 1. 修改代碼
 vim Dockerfile
 
 # 2. 一鍵構建、推送、部署
-make dev
+make dev  # 自動推送到 localhost:5001
+```
+
+### GHCR 生產模式
+```bash
+# 使用 GitHub Container Registry (需先執行 make setup-ghcr)
+# 1. 修改代碼並推送到 GitHub
+# 2. CI/CD 自動構建並推送映像到 GHCR
+# 3. ArgoCD 自動同步部署
+
+# 檢查 GHCR 映像是否公開
+make check-ghcr-access
+
+# 如果使用私有映像，設置認證
+make setup-ghcr-secret
 
 # 3. 提交並推送所有變更（整合 Git 工作流程）
 make update MSG="feat: add new feature"

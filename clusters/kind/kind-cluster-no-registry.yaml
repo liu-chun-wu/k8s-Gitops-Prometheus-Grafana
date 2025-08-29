@@ -1,0 +1,36 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: gitops-demo
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # Ingress controller ports
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+      # Prometheus
+      - containerPort: 30090
+        hostPort: 9090
+        protocol: TCP
+      # Grafana
+      - containerPort: 30301
+        hostPort: 3001
+        protocol: TCP
+      # Argo CD Server
+      - containerPort: 30081
+        hostPort: 8081
+        protocol: TCP
+  - role: worker
+  - role: worker
+
+# No containerd registry configuration for GHCR mode
+# GHCR images will be pulled directly from ghcr.io
