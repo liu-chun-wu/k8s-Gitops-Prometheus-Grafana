@@ -495,7 +495,7 @@ status: ## Check system status and health
 	done || echo "$(YELLOW)No applications deployed$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Service Health:$(RESET)"
-	@curl -sf -o /dev/null http://argocd.local/api/v1/version 2>/dev/null && \
+	@curl -sf -o /dev/null http://argocd.local/api/version 2>/dev/null && \
 		echo "$(GREEN)✅ ArgoCD API healthy$(RESET)" || echo "$(YELLOW)⚠️  ArgoCD not accessible (check /etc/hosts)$(RESET)"
 	@if [ "$(DETAILED)" = "1" ]; then \
 		echo ""; \
