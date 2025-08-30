@@ -5,7 +5,7 @@
         build-local develop-local \
         release-ghcr check-sync-strict wait-for-actions sync-actions-changes release-status \
         deploy-app-local deploy-app-ghcr deploy-monitoring \
-        verify access logs check-git-status
+        status verify access logs check-git-status
 
 #=============================================================================
 # VARIABLES & SETTINGS
@@ -85,7 +85,7 @@ help: ## Show all available commands
 	@echo ""
 	@echo "$(GREEN)📋 Operations$(RESET)"
 	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
-	@echo "  $(CYAN)verify$(RESET)             Check system status & health"
+	@echo "  $(CYAN)status$(RESET)             Check system status & health"
 	@echo "  $(CYAN)access$(RESET)             Show URLs and credentials"
 	@echo "  $(CYAN)logs$(RESET)               View ArgoCD server logs"
 	@echo ""
@@ -123,7 +123,7 @@ quickstart-local: ## Complete setup for local development
 	@$(MAKE) deploy-app-local DRY_RUN=$(DRY_RUN)
 	@$(MAKE) deploy-monitoring DRY_RUN=$(DRY_RUN)
 	@if [ "$(DRY_RUN)" != "1" ]; then sleep 3; fi
-	@$(MAKE) verify
+	@$(MAKE) status
 	@echo ""
 	@echo "$(GREEN)✅ Local development environment ready!$(RESET)"
 	@$(MAKE) access
@@ -138,7 +138,7 @@ quickstart-ghcr: ## Complete setup for GHCR deployment
 	@$(MAKE) deploy-app-ghcr DRY_RUN=$(DRY_RUN)
 	@$(MAKE) deploy-monitoring DRY_RUN=$(DRY_RUN)
 	@if [ "$(DRY_RUN)" != "1" ]; then sleep 3; fi
-	@$(MAKE) verify
+	@$(MAKE) status
 	@echo ""
 	@echo "$(GREEN)✅ GHCR deployment environment ready!$(RESET)"
 	@$(MAKE) access
@@ -448,20 +448,46 @@ check-git-status: ## Check for uncommitted changes (used by GHCR workflow)
 #=============================================================================
 # OPERATIONS & MONITORING
 #=============================================================================
-verify: ## Check system status and health
-	@echo "$(CYAN)🔍 System Verification$(RESET)"
-	@echo "$(CYAN)=====================$(RESET)"
+status: ## Check system status and health
+	@echo "$(CYAN)🔍 System Status$(RESET)"
+	@echo "$(CYAN)=================$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Cluster Status:$(RESET)"
 	@kubectl get nodes 2>/dev/null && echo "$(GREEN)✅ Cluster is running$(RESET)" || echo "$(RED)❌ Cluster not found$(RESET)"
 	@echo ""
 	@echo "$(CYAN)Core Components:$(RESET)"
-	@kubectl get pods -n argocd --no-headers 2>/dev/null | grep -v Running | grep -v Completed > /dev/null && \
-		echo "$(YELLOW)⚠️  Some ArgoCD pods not ready$(RESET)" || echo "$(GREEN)✅ ArgoCD running$(RESET)" || echo "$(RED)❌ ArgoCD not installed$(RESET)"
-	@kubectl get pods -n ingress-nginx 2>/dev/null | grep Running > /dev/null && \
-		echo "$(GREEN)✅ Ingress controller running$(RESET)" || echo "$(RED)❌ Ingress not installed$(RESET)"
-	@kubectl get pods -n monitoring --no-headers 2>/dev/null | wc -l | xargs -I {} test {} -gt 0 && \
-		echo "$(GREEN)✅ Monitoring stack running$(RESET)" || echo "$(YELLOW)⚠️  Monitoring not installed$(RESET)"
+	@if kubectl get ns argocd &>/dev/null; then \
+		RUNNING=$$(kubectl get pods -n argocd --no-headers 2>/dev/null | grep -c Running || echo 0); \
+		TOTAL=$$(kubectl get pods -n argocd --no-headers 2>/dev/null | wc -l | xargs || echo 0); \
+		if [ "$$RUNNING" -gt 0 ]; then \
+			if [ "$$RUNNING" -eq "$$TOTAL" ]; then \
+				echo "$(GREEN)✅ ArgoCD running ($$RUNNING/$$TOTAL pods)$(RESET)"; \
+			else \
+				echo "$(YELLOW)⚠️  ArgoCD partially ready ($$RUNNING/$$TOTAL pods)$(RESET)"; \
+			fi; \
+		else \
+			echo "$(RED)❌ ArgoCD pods not ready$(RESET)"; \
+		fi; \
+	else \
+		echo "$(RED)❌ ArgoCD not installed$(RESET)"; \
+	fi
+	@if kubectl get ns ingress-nginx &>/dev/null; then \
+		kubectl get pods -n ingress-nginx 2>/dev/null | grep -q Running && \
+			echo "$(GREEN)✅ Ingress controller running$(RESET)" || \
+			echo "$(RED)❌ Ingress controller not ready$(RESET)"; \
+	else \
+		echo "$(RED)❌ Ingress not installed$(RESET)"; \
+	fi
+	@if kubectl get ns monitoring &>/dev/null; then \
+		PODS=$$(kubectl get pods -n monitoring --no-headers 2>/dev/null | wc -l | xargs); \
+		if [ "$$PODS" -gt 0 ]; then \
+			echo "$(GREEN)✅ Monitoring stack running ($$PODS pods)$(RESET)"; \
+		else \
+			echo "$(YELLOW)⚠️  Monitoring namespace exists but no pods$(RESET)"; \
+		fi; \
+	else \
+		echo "$(YELLOW)⚠️  Monitoring not installed$(RESET)"; \
+	fi
 	@echo ""
 	@echo "$(CYAN)Applications:$(RESET)"
 	@kubectl get applications -n argocd 2>/dev/null | tail -n +2 | while read app rest; do \
@@ -476,6 +502,9 @@ verify: ## Check system status and health
 		echo "$(CYAN)Detailed Pod Status:$(RESET)"; \
 		kubectl get pods -A | grep -E "(argocd|monitoring|demo-)" || true; \
 	fi
+
+verify: ## Alias for status (deprecated, use 'make status' instead)
+	@$(MAKE) status
 
 access: ## Show all access URLs and credentials
 	@echo "$(CYAN)🌐 Service Access Information$(RESET)"
