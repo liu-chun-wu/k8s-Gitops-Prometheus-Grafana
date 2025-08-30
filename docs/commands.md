@@ -47,6 +47,8 @@
 | `make logs` | ArgoCD 日誌 |
 | `make test` | 測試 Registry |
 | `make check-ghcr-access` | 檢查 GHCR 訪問 |
+| `make pause-services` | 暫停所有服務（保留資料） |
+| `make resume-services` | 恢復所有服務（含健康檢查） |
 
 ## 🌐 服務訪問
 
@@ -78,6 +80,19 @@ make update MSG="feat: new feature"
 make status
 make logs
 make clean && make quickstart
+```
+
+### 暫停與恢復服務
+```bash
+# 暫停所有服務以節省資源
+make pause-services
+
+# 恢復所有服務（自動等待服務就緒）
+make resume-services
+# ✨ v2 新功能：自動健康檢查
+# - 等待所有 Pod 就緒
+# - 驗證 ArgoCD API 可訪問
+# - 顯示詳細恢復進度
 ```
 
 ## ⚙️ 環境變數

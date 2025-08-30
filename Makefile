@@ -5,7 +5,7 @@
         build-local develop-local \
         release-ghcr check-sync-strict wait-for-actions sync-actions-changes release-status \
         deploy-app-local deploy-app-ghcr deploy-monitoring \
-        status verify access logs check-git-status
+        status verify access logs check-git-status pause-services resume-services
 
 #=============================================================================
 # VARIABLES & SETTINGS
@@ -88,6 +88,8 @@ help: ## Show all available commands
 	@echo "  $(CYAN)status$(RESET)             Check system status & health"
 	@echo "  $(CYAN)access$(RESET)             Show URLs and credentials"
 	@echo "  $(CYAN)logs$(RESET)               View ArgoCD server logs"
+	@echo "  $(CYAN)pause-services$(RESET)     Pause all services (keep data)"
+	@echo "  $(CYAN)resume-services$(RESET)    Resume all services"
 	@echo ""
 	@echo "$(YELLOW)💡 Tips$(RESET)"
 	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
@@ -524,3 +526,110 @@ access: ## Show all access URLs and credentials
 logs: ## Show ArgoCD server logs
 	@echo "$(CYAN)📜 ArgoCD Server Logs (last 50 lines)$(RESET)"
 	@kubectl logs -n argocd deployment/argocd-server --tail=50 2>/dev/null || echo "$(RED)❌ ArgoCD not found$(RESET)"
+
+pause-services: ## Pause all services but keep data
+	@echo "$(CYAN)⏸️  Pausing all services...$(RESET)"
+	@echo "$(YELLOW)This will scale down all deployments and statefulsets to 0 replicas$(RESET)"
+	@echo "$(YELLOW)All data and configurations will be preserved$(RESET)"
+	# Pause ArgoCD
+	$(call execute_cmd, kubectl scale deployment -n argocd --replicas=0 --all 2>/dev/null || true)
+	$(call execute_cmd, kubectl scale statefulset -n argocd --replicas=0 --all 2>/dev/null || true)
+	# Pause Monitoring
+	$(call execute_cmd, kubectl scale deployment -n monitoring --replicas=0 --all 2>/dev/null || true)
+	$(call execute_cmd, kubectl scale statefulset -n monitoring --replicas=0 --all 2>/dev/null || true)
+	# Pause Demo Applications
+	$(call execute_cmd, kubectl scale deployment -n demo-ghcr --replicas=0 --all 2>/dev/null || true)
+	$(call execute_cmd, kubectl scale deployment -n demo-local --replicas=0 --all 2>/dev/null || true)
+	# Pause Ingress Controller
+	$(call execute_cmd, kubectl scale deployment -n ingress-nginx --replicas=0 --all 2>/dev/null || true)
+	@echo "$(GREEN)✅ All services paused successfully!$(RESET)"
+	@echo "$(CYAN)Use 'make resume-services' to restart$(RESET)"
+
+resume-services: ## Resume all services with health checks
+	@echo "$(CYAN)▶️  Resuming all services...$(RESET)"
+	# Resume ArgoCD
+	$(call execute_cmd, kubectl scale deployment -n argocd --replicas=1 --all 2>/dev/null || true)
+	$(call execute_cmd, kubectl scale statefulset -n argocd --replicas=1 --all 2>/dev/null || true)
+	# Resume Monitoring
+	$(call execute_cmd, kubectl scale deployment -n monitoring --replicas=1 --all 2>/dev/null || true)
+	$(call execute_cmd, kubectl scale statefulset -n monitoring --replicas=1 --all 2>/dev/null || true)
+	# Resume Demo Applications (usually 2 replicas)
+	$(call execute_cmd, kubectl scale deployment ghcr-podinfo -n demo-ghcr --replicas=2 2>/dev/null || true)
+	$(call execute_cmd, kubectl scale deployment local-podinfo -n demo-local --replicas=2 2>/dev/null || true)
+	# Resume Ingress Controller
+	$(call execute_cmd, kubectl scale deployment ingress-nginx-controller -n ingress-nginx --replicas=1 2>/dev/null || true)
+	@echo ""
+	@echo "$(CYAN)⏳ Waiting for services to be ready...$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	# Wait for ArgoCD
+	@echo "$(CYAN)Checking ArgoCD...$(RESET)"
+	@kubectl wait --for=condition=available --timeout=120s \
+		deployment/argocd-server -n argocd 2>/dev/null && \
+		echo "$(GREEN)  ✓ ArgoCD server ready$(RESET)" || \
+		echo "$(YELLOW)  ⚠️  ArgoCD server timeout (may still be starting)$(RESET)"
+	@kubectl wait --for=condition=ready --timeout=60s \
+		statefulset/argocd-application-controller -n argocd 2>/dev/null && \
+		echo "$(GREEN)  ✓ ArgoCD application controller ready$(RESET)" || \
+		echo "$(YELLOW)  ⚠️  ArgoCD controller timeout$(RESET)"
+	# Wait for Ingress Controller
+	@echo "$(CYAN)Checking Ingress Controller...$(RESET)"
+	@kubectl wait --for=condition=ready pod \
+		-l app.kubernetes.io/component=controller \
+		-n ingress-nginx --timeout=60s 2>/dev/null && \
+		echo "$(GREEN)  ✓ Ingress controller ready$(RESET)" || \
+		echo "$(YELLOW)  ⚠️  Ingress controller timeout$(RESET)"
+	# Wait for Monitoring Stack
+	@echo "$(CYAN)Checking Monitoring Stack...$(RESET)"
+	@if kubectl get deployment kube-prometheus-stack-grafana -n monitoring &>/dev/null; then \
+		kubectl wait --for=condition=available --timeout=120s \
+			deployment/kube-prometheus-stack-grafana -n monitoring 2>/dev/null && \
+			echo "$(GREEN)  ✓ Grafana ready$(RESET)" || \
+			echo "$(YELLOW)  ⚠️  Grafana timeout$(RESET)"; \
+		kubectl wait --for=condition=ready --timeout=120s \
+			statefulset/prometheus-kube-prometheus-stack-prometheus -n monitoring 2>/dev/null && \
+			echo "$(GREEN)  ✓ Prometheus ready$(RESET)" || \
+			echo "$(YELLOW)  ⚠️  Prometheus timeout$(RESET)"; \
+	else \
+		echo "$(YELLOW)  ⚠️  Monitoring stack not deployed$(RESET)"; \
+	fi
+	# Check ArgoCD API
+	@echo "$(CYAN)Verifying ArgoCD API...$(RESET)"
+	@RETRY=0; MAX_RETRY=30; \
+	while [ $$RETRY -lt $$MAX_RETRY ]; do \
+		if curl -sf -o /dev/null http://argocd.local/api/version 2>/dev/null; then \
+			echo "$(GREEN)  ✓ ArgoCD API is responding$(RESET)"; \
+			break; \
+		fi; \
+		RETRY=$$((RETRY + 1)); \
+		if [ $$RETRY -eq $$MAX_RETRY ]; then \
+			echo "$(YELLOW)  ⚠️  ArgoCD API not responding (check /etc/hosts)$(RESET)"; \
+		else \
+			printf "\r  Waiting for ArgoCD API... ($$RETRY/$$MAX_RETRY)"; \
+			sleep 2; \
+		fi; \
+	done
+	# Show service status summary
+	@echo ""
+	@echo "$(CYAN)📊 Service Status Summary:$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@ARGOCD_PODS=$$(kubectl get pods -n argocd --no-headers 2>/dev/null | grep -c Running || echo 0); \
+	ARGOCD_TOTAL=$$(kubectl get pods -n argocd --no-headers 2>/dev/null | wc -l | xargs || echo 0); \
+	echo "  ArgoCD:     $$ARGOCD_PODS/$$ARGOCD_TOTAL pods running"
+	@MONITORING_PODS=$$(kubectl get pods -n monitoring --no-headers 2>/dev/null | grep -c Running || echo 0); \
+	MONITORING_TOTAL=$$(kubectl get pods -n monitoring --no-headers 2>/dev/null | wc -l | xargs || echo 0); \
+	if [ "$$MONITORING_TOTAL" -gt 0 ]; then \
+		echo "  Monitoring: $$MONITORING_PODS/$$MONITORING_TOTAL pods running"; \
+	else \
+		echo "  Monitoring: not deployed"; \
+	fi
+	@INGRESS_PODS=$$(kubectl get pods -n ingress-nginx --no-headers 2>/dev/null | grep -c Running || echo 0); \
+	INGRESS_TOTAL=$$(kubectl get pods -n ingress-nginx --no-headers 2>/dev/null | wc -l | xargs || echo 0); \
+	echo "  Ingress:    $$INGRESS_PODS/$$INGRESS_TOTAL pods running"
+	@DEMO_GHCR_PODS=$$(kubectl get pods -n demo-ghcr --no-headers 2>/dev/null | grep -c Running || echo 0); \
+	DEMO_LOCAL_PODS=$$(kubectl get pods -n demo-local --no-headers 2>/dev/null | grep -c Running || echo 0); \
+	if [ "$$DEMO_GHCR_PODS" -gt 0 ] || [ "$$DEMO_LOCAL_PODS" -gt 0 ]; then \
+		echo "  Demo Apps:  $$DEMO_GHCR_PODS (ghcr) / $$DEMO_LOCAL_PODS (local) pods"; \
+	fi
+	@echo ""
+	@echo "$(GREEN)✅ Services resumed with health checks completed!$(RESET)"
+	@echo "$(CYAN)Run 'make status' for detailed status or 'make access' for URLs$(RESET)"

@@ -15,6 +15,10 @@ sudo sh -c 'echo "127.0.0.1 argocd.local" >> /etc/hosts'
 
 # 3. 查看訪問資訊
 make access
+
+# 4. 暫停/恢復服務（可選）
+make pause-services    # 暫停所有服務（保留資料）
+make resume-services   # 恢復所有服務（含健康檢查）
 ```
 
 ## 🌐 服務訪問

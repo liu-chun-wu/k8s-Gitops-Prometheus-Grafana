@@ -65,6 +65,75 @@ kubectl logs -n demo-local -l app=podinfo    # 應用日誌
 kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus  # Prometheus
 ```
 
+### 服務暫停與恢復
+```bash
+# 暫停所有服務（節省資源但保留資料）
+make pause-services
+
+# 檢查暫停狀態
+kubectl get deployments -A
+kubectl get statefulsets -A
+
+# 恢復所有服務（含自動健康檢查）
+make resume-services
+
+# 檢查服務狀態
+make status
+```
+
+**🆕 自動健康檢查機制（v2 新功能）**：
+
+`resume-services` 現在包含完整的健康檢查流程：
+
+1. **服務恢復階段**：
+   - 恢復所有 Deployment 和 StatefulSet 的副本數
+   - 包含 ArgoCD、Monitoring、Ingress、Demo Apps
+
+2. **健康檢查階段**：
+   - ✅ 等待 ArgoCD server 和 application controller 就緒（最多 120 秒）
+   - ✅ 等待 Ingress controller Pod 就緒（最多 60 秒）
+   - ✅ 等待 Grafana 和 Prometheus 就緒（最多 120 秒）
+   - ✅ 驗證 ArgoCD API 可訪問性（最多重試 30 次）
+
+3. **狀態摘要顯示**：
+   - 顯示各 namespace 的 Pod 運行狀態
+   - 提供服務恢復的詳細進度
+   - 如果某個服務超時會顯示警告但不中斷流程
+
+**範例輸出**：
+```
+▶️  Resuming all services...
+
+⏳ Waiting for services to be ready...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Checking ArgoCD...
+  ✓ ArgoCD server ready
+  ✓ ArgoCD application controller ready
+Checking Ingress Controller...
+  ✓ Ingress controller ready
+Checking Monitoring Stack...
+  ✓ Grafana ready
+  ✓ Prometheus ready
+Verifying ArgoCD API...
+  ✓ ArgoCD API is responding
+
+📊 Service Status Summary:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ArgoCD:     7/7 pods running
+  Monitoring: 5/5 pods running
+  Ingress:    1/1 pods running
+  Demo Apps:  2 (ghcr) / 2 (local) pods
+
+✅ Services resumed with health checks completed!
+```
+
+**注意事項**：
+- 暫停服務會將所有 Deployment 和 StatefulSet 的副本數設為 0
+- 所有資料（PersistentVolume）和配置（ConfigMap、Secret）都會保留
+- ArgoCD 暫停後不會自動同步 Git 變更，需手動恢復後才會繼續同步
+- 適用場景：節省資源、臨時維護、開發環境暫停
+- 健康檢查確保服務真正可用，而非只是 Pod 啟動
+
 ### 清理操作
 ```bash
 make clean                    # 刪除整個叢集
