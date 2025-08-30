@@ -1,167 +1,126 @@
-# 運維操作指南
+# 運維手冊
 
 ## ArgoCD 管理
 
 ### 訪問配置
-
-#### Ingress 訪問設置
 ```bash
-# 完整設置（含密碼）
-make ingress
-
-# 手動步驟
-kubectl apply -f ingress/argocd/argocd-ingress.yaml
-kubectl apply -f gitops/argocd/argocd-secret.yaml
+make ingress           # 設置 Ingress + 固定密碼
+make access           # 查看訪問資訊
 ```
 
-#### 密碼管理
-- 開發環境固定密碼：admin / admin123
-- 生產環境建議：Sealed Secrets, External Secrets
+- **URL**: http://argocd.local
+- **帳號**: admin / admin123
 
-### 應用管理
-
+### 應用操作
 ```bash
-# 查看所有應用
+# 查看應用
 kubectl get applications -n argocd
 
-# 同步應用
+# 同步應用  
 argocd app sync podinfo-local
 
-# 刪除應用
-kubectl delete application podinfo-local -n argocd
+# 強制刷新
+kubectl patch application podinfo-local -n argocd \
+  --type merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'
 ```
 
 ## 監控系統
 
 ### Prometheus
-
-#### 訪問方式
-- Port-forward: `kubectl port-forward svc/kube-prometheus-stack-prometheus -n monitoring 9090:9090`
-- URL: http://localhost:9090
-
-#### 常用查詢
-```promql
-# CPU 使用率
-rate(container_cpu_usage_seconds_total[5m])
-
-# 內存使用
-container_memory_usage_bytes
-
-# Pod 重啟次數
-kube_pod_container_status_restarts_total
-```
+- **URL**: http://localhost:9090
+- **常用查詢**:
+  - CPU: `rate(container_cpu_usage_seconds_total[5m])`
+  - Memory: `container_memory_usage_bytes`
+  - Restarts: `kube_pod_container_status_restarts_total`
 
 ### Grafana
+- **URL**: http://localhost:3001  
+- **帳號**: admin / admin123
+- **推薦儀表板**: 7249, 6417, 1860
 
-#### 訪問方式
-- URL: http://localhost:3001
-- 登入: admin / admin123
+## 故障排除速查
 
-#### 推薦儀表板
-- Kubernetes Cluster Overview (ID: 7249)
-- Kubernetes Pod Overview (ID: 6417)
-- Node Exporter Full (ID: 1860)
-
-## 清理操作
-
-### 快速清理
-```bash
-make clean  # 刪除整個叢集
-```
-
-### 選擇性清理
-
-#### 刪除應用
-```bash
-kubectl delete applications --all -n argocd
-```
-
-#### 刪除命名空間
-```bash
-kubectl delete namespace demo-local demo-ghcr monitoring
-```
-
-#### 重置 ArgoCD
-```bash
-kubectl delete namespace argocd
-make install-argocd
-```
+| 問題 | 診斷命令 | 解決方案 |
+|------|---------|----------|
+| ArgoCD 無法訪問 | `kubectl get pods -n argocd` | `make ingress` |
+| 應用 OutOfSync | `kubectl get app -n argocd` | `make dev` 或強制同步 |
+| Prometheus 無數據 | `curl http://localhost:9090/targets` | 檢查 ServiceMonitor |
+| Grafana 登入失敗 | `kubectl get svc -n monitoring` | 使用 admin/admin123 |
+| Ingress 無法訪問 | `kubectl get ingress -A` | 檢查 /etc/hosts |
+| Pod CrashLoop | `kubectl describe pod <name>` | 查看日誌找原因 |
 
 ## 日常維護
 
 ### 健康檢查
 ```bash
-# 叢集狀態
-make status
-
-# 詳細診斷
-kubectl get nodes
-kubectl get pods -A | grep -v Running
-kubectl top nodes
-kubectl top pods -A
+make status                            # 整體狀態
+kubectl get pods -A | grep -v Running  # 問題 Pod
+kubectl top nodes                      # 資源使用
 ```
 
 ### 日誌查看
 ```bash
-# ArgoCD 日誌
-make logs
-
-# 應用日誌
-kubectl logs -n demo-local -l app=podinfo --tail=100
-
-# 監控日誌
-kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus
+make logs                                     # ArgoCD 日誌
+kubectl logs -n demo-local -l app=podinfo    # 應用日誌
+kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus  # Prometheus
 ```
 
-### 備份與恢復
-
-#### 備份 ArgoCD 應用
+### 清理操作
 ```bash
-kubectl get applications -n argocd -o yaml > argocd-apps-backup.yaml
+make clean                    # 刪除整個叢集
+kubectl delete apps --all -n argocd  # 只刪應用
+kubectl delete ns demo-local demo-ghcr  # 刪命名空間
 ```
 
-#### 恢復應用
+## 進階診斷
+
+### 叢集問題
 ```bash
-kubectl apply -f argocd-apps-backup.yaml
+# 節點狀態
+kubectl describe node
+
+# Docker 重啟
+docker restart gitops-demo-control-plane
+
+# 重建叢集
+make clean && make quickstart
 ```
 
-## 故障處理
-
-### ArgoCD 無法同步
+### 網路問題
 ```bash
-# 檢查應用狀態
-kubectl get application podinfo-local -n argocd -o yaml
+# 檢查 Service
+kubectl get svc,ep -A
 
-# 強制同步
-kubectl patch application podinfo-local -n argocd --type merge \
-  -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"hard"}}}'
+# 測試連接
+kubectl exec -it <pod> -- curl <service>:<port>
+
+# DNS 測試
+kubectl exec -it <pod> -- nslookup <service>
 ```
 
-### Prometheus 無數據
+### 存儲問題
 ```bash
-# 檢查 ServiceMonitor
-kubectl get servicemonitor -A
+# PV/PVC 狀態
+kubectl get pv,pvc -A
 
-# 檢查 Prometheus 配置
-kubectl get prometheus -n monitoring -o yaml
+# 清理未使用 PVC
+kubectl delete pvc --all -n <namespace>
 ```
 
-### Ingress 無法訪問
+## 備份恢復
+
 ```bash
-# 檢查 Ingress Controller
-kubectl get pods -n ingress-nginx
+# 備份應用
+kubectl get applications -n argocd -o yaml > backup.yaml
 
-# 檢查 Ingress 資源
-kubectl get ingress -A
-
-# 檢查 DNS
-nslookup argocd.local
+# 恢復應用
+kubectl apply -f backup.yaml
 ```
 
 ## 安全建議
 
-1. **生產環境不使用固定密碼**
-2. **啟用 RBAC**
-3. **定期更新組件**
-4. **監控審計日誌**
-5. **使用 NetworkPolicy**
+1. **生產環境**: 不使用固定密碼
+2. **Secret 管理**: 使用 Sealed Secrets
+3. **RBAC**: 啟用角色權限控制
+4. **網路策略**: 限制 Pod 間通訊
+5. **審計日誌**: 監控敏感操作
