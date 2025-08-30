@@ -3,7 +3,7 @@
         cluster-create cluster-delete registry-setup registry-test \
         argocd-install argocd-config ingress-install ingress-config \
         build-local develop-local \
-        release-ghcr \
+        release-ghcr check-sync-strict wait-for-actions sync-actions-changes release-status \
         deploy-app-local deploy-app-ghcr deploy-monitoring \
         verify access logs check-git-status
 
@@ -266,19 +266,146 @@ develop-local: ## 💻 Development workflow (build+push+update+sync)
 #=============================================================================
 # GHCR RELEASE
 #=============================================================================
-release-ghcr: ## ☁️ Release to GHCR (add+commit+sync+push)
+
+# 嚴格檢查同步狀態
+check-sync-strict: ## Check sync status with strict safety checks
+	@echo "$(CYAN)🔍 檢查本地與遠端同步狀態...$(RESET)"
+	@git fetch origin main
+	@LOCAL_CHANGES=$$(git status --porcelain); \
+	BEHIND=$$(git rev-list HEAD..origin/main --count); \
+	AHEAD=$$(git rev-list origin/main..HEAD --count); \
+	if [ "$$BEHIND" -gt 0 ] && [ -n "$$LOCAL_CHANGES" ]; then \
+		echo "$(RED)❌ 錯誤：本地有未提交變更且落後於遠端$(RESET)"; \
+		echo "$(YELLOW)本地落後 $$BEHIND 個提交$(RESET)"; \
+		echo "$(YELLOW)請先手動處理：$(RESET)"; \
+		echo "  1. git stash        # 暫存本地變更"; \
+		echo "  2. git pull --rebase origin main"; \
+		echo "  3. git stash pop    # 恢復變更"; \
+		echo "  4. 解決任何衝突後再執行 make release-ghcr"; \
+		exit 1; \
+	elif [ "$$BEHIND" -gt 0 ]; then \
+		echo "$(YELLOW)⚠️  本地落後於遠端 $$BEHIND 個提交$(RESET)"; \
+		echo "$(CYAN)📥 自動同步遠端變更...$(RESET)"; \
+		git pull --rebase origin main || exit 1; \
+		echo "$(GREEN)✅ 同步完成$(RESET)"; \
+	elif [ "$$AHEAD" -gt 0 ]; then \
+		echo "$(YELLOW)⚠️  本地領先遠端 $$AHEAD 個提交（尚未推送）$(RESET)"; \
+	else \
+		echo "$(GREEN)✅ 本地與遠端已同步$(RESET)"; \
+	fi
+
+# 等待 GitHub Actions 完成
+wait-for-actions: ## Wait for GitHub Actions to complete
+	@echo "$(CYAN)⏳ 等待 GitHub Actions 完成...$(RESET)"
+	@CURRENT_SHA=$$(git rev-parse HEAD); \
+	echo "$(CYAN)監控 commit: $${CURRENT_SHA:0:7}$(RESET)"; \
+	sleep 5; \
+	ATTEMPTS=0; \
+	while [ $$ATTEMPTS -lt 60 ]; do \
+		STATUS=$$(gh run list --workflow=release-ghcr.yml --limit 1 --json status,headSha \
+			| jq -r --arg sha "$$CURRENT_SHA" '.[] | select(.headSha==$$sha) | .status' 2>/dev/null); \
+		if [ "$$STATUS" = "completed" ]; then \
+			CONCLUSION=$$(gh run list --workflow=release-ghcr.yml --limit 1 --json conclusion,headSha \
+				| jq -r --arg sha "$$CURRENT_SHA" '.[] | select(.headSha==$$sha) | .conclusion' 2>/dev/null); \
+			if [ "$$CONCLUSION" = "success" ]; then \
+				echo "$(GREEN)✅ GitHub Actions 成功完成！$(RESET)"; \
+			else \
+				echo "$(RED)❌ GitHub Actions 失敗: $$CONCLUSION$(RESET)"; \
+				exit 1; \
+			fi; \
+			break; \
+		elif [ "$$STATUS" = "failure" ] || [ "$$STATUS" = "cancelled" ]; then \
+			echo "$(RED)❌ GitHub Actions 狀態: $$STATUS$(RESET)"; \
+			exit 1; \
+		elif [ -n "$$STATUS" ]; then \
+			echo "⏳ 狀態: $$STATUS - 等待中..."; \
+		fi; \
+		sleep 10; \
+		ATTEMPTS=$$((ATTEMPTS + 1)); \
+	done; \
+	if [ $$ATTEMPTS -eq 60 ]; then \
+		echo "$(YELLOW)⚠️  等待超時，請手動檢查 GitHub Actions$(RESET)"; \
+	fi
+
+# 同步 Actions 產生的變更
+sync-actions-changes: ## Sync changes made by GitHub Actions
+	@echo "$(CYAN)📥 同步 GitHub Actions 的變更...$(RESET)"
+	@git fetch origin main
+	@git pull --rebase origin main || { \
+		echo "$(RED)❌ 同步失敗，請手動執行 git pull$(RESET)"; \
+		exit 1; \
+	}
+	@echo "$(GREEN)✅ 已同步最新變更$(RESET)"
+
+# 顯示當前狀態
+release-status: ## Show current release status
+	@echo "$(CYAN)📊 Release 狀態檢查$(RESET)"
+	@echo "$(CYAN)========================$(RESET)"
+	@git fetch origin main 2>/dev/null
+	@echo "$(CYAN)本地分支:$(RESET) $$(git branch --show-current)"
+	@echo "$(CYAN)最新提交:$(RESET) $$(git log -1 --oneline)"
+	@BEHIND=$$(git rev-list HEAD..origin/main --count); \
+	AHEAD=$$(git rev-list origin/main..HEAD --count); \
+	if [ "$$BEHIND" -gt 0 ]; then \
+		echo "$(YELLOW)落後遠端:$(RESET) $$BEHIND 個提交"; \
+	fi; \
+	if [ "$$AHEAD" -gt 0 ]; then \
+		echo "$(YELLOW)領先遠端:$(RESET) $$AHEAD 個提交（未推送）"; \
+	fi; \
+	if [ "$$BEHIND" -eq 0 ] && [ "$$AHEAD" -eq 0 ]; then \
+		echo "$(GREEN)同步狀態:$(RESET) ✅ 已同步"; \
+	fi
+	@if [ -n "$$(git status --porcelain)" ]; then \
+		echo "$(YELLOW)本地變更:$(RESET) 有未提交的變更"; \
+		git status --short; \
+	else \
+		echo "$(GREEN)工作區:$(RESET) 乾淨"; \
+	fi
+	@echo ""
+	@echo "$(CYAN)GitHub Actions 最新狀態:$(RESET)"
+	@gh run list --workflow=release-ghcr.yml --limit 3 2>/dev/null || echo "  需要 gh CLI 來顯示 workflow 狀態"
+
+release-ghcr: ## ☁️ Release to GHCR with safety checks
 	@echo "$(CYAN)☁️  Starting GHCR release workflow...$(RESET)"
-	@echo "$(CYAN)📝 Adding local changes...$(RESET)"
+	
+	# Step 1: 嚴格檢查同步狀態
+	@$(MAKE) check-sync-strict
+	
+	# Step 2: 檢查是否有變更需要提交
+	@if [ -z "$$(git status --porcelain)" ]; then \
+		echo "$(YELLOW)⚠️  沒有變更需要提交$(RESET)"; \
+		echo "$(CYAN)如需觸發新構建，使用：git commit --allow-empty -m 'trigger build'$(RESET)"; \
+		exit 0; \
+	fi
+	
+	# Step 3: 提交本地變更
+	@echo "$(CYAN)📝 添加並提交變更...$(RESET)"
 	$(call execute_cmd, git add .)
-	@echo "$(CYAN)📝 Committing changes...$(RESET)"
 	$(call execute_cmd, git commit -m "$(MSG)")
-	@echo "$(CYAN)🔄 Syncing with remote...$(RESET)"
-	$(call execute_cmd, git pull --no-rebase origin main || echo "$(YELLOW)⚠️  Sync failed - manual merge may be required$(RESET)")
-	@echo "$(CYAN)📤 Pushing to remote...$(RESET)"
-	$(call execute_cmd, git push origin main)
-	@echo "$(GREEN)✅ GHCR release complete!$(RESET)"
-	@echo "$(CYAN)💡 GitHub Actions will now build and push the image$(RESET)"
-	@echo "$(CYAN)💡 ArgoCD will automatically deploy the new version$(RESET)"
+	
+	# Step 4: 推送到遠端
+	@echo "$(CYAN)📤 推送到遠端...$(RESET)"
+	@git push origin main || { \
+		echo "$(RED)❌ 推送失敗$(RESET)"; \
+		echo "$(YELLOW)可能的原因：$(RESET)"; \
+		echo "  • 遠端有新的提交（執行 git pull --rebase 後重試）"; \
+		echo "  • 沒有推送權限"; \
+		exit 1; \
+	}
+	
+	# Step 5: 等待 GitHub Actions 完成
+	@echo "$(CYAN)⏳ 等待 GitHub Actions 完成...$(RESET)"
+	@$(MAKE) wait-for-actions || echo "$(YELLOW)⚠️  無法確認 Actions 狀態$(RESET)"
+	
+	# Step 6: 同步 Actions 的 image tag 更新
+	@echo "$(CYAN)📥 同步 GitHub Actions 的 tag 更新...$(RESET)"
+	@git pull --rebase origin main || { \
+		echo "$(YELLOW)⚠️  同步失敗，請手動執行 git pull$(RESET)"; \
+	}
+	
+	@echo "$(GREEN)✅ GHCR release 完成！$(RESET)"
+	@echo "$(CYAN)💡 新的 image tag 已更新在 kustomization.yaml$(RESET)"
+	@echo "$(CYAN)💡 ArgoCD 將自動部署新版本$(RESET)"
 
 #=============================================================================
 # DEPLOYMENT COMMANDS
