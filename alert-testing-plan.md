@@ -15,6 +15,7 @@ Prometheus → AlertManager → alertmanager-discord → Discord Webhook
 - ✅ Prometheus Stack 已部署
 - ✅ Discord Webhook 已配置
 - ✅ Grafana Dashboards（15757-15762, 19105）已導入
+- ✅ Metrics Server 已安裝（用於 kubectl top 命令）
 
 ## 🚀 快速開始
 
@@ -25,10 +26,16 @@ cat .env | grep DISCORD_WEBHOOK_URL
 # 2. 安裝預警系統
 make alert-install
 
-# 3. 執行快速測試
+# 3. 確認 metrics-server 已安裝（用於 kubectl top）
+kubectl get deployment metrics-server -n kube-system
+# 如未安裝，執行：
+# kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# kubectl patch deployment metrics-server -n kube-system --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]'
+
+# 4. 執行快速測試
 make test-alert-instant
 
-# 4. 檢查 Discord 頻道是否收到通知
+# 5. 檢查 Discord 頻道是否收到通知
 ```
 
 ## 📊 測試階段
@@ -62,12 +69,16 @@ kubectl edit prometheusrule test-instant-alert -n monitoring
 #### 2.1 CPU 壓力測試
 ```bash
 # 部署 CPU 壓力測試
-kubectl run cpu-stress --image=alpine/stress-ng \
+kubectl run cpu-stress --image=polinux/stress \
   --namespace=demo-ghcr \
-  --restart=Never -- --cpu 2 --timeout 360s
+  --restart=Never -- stress --cpu 2 --timeout 360s
 
-# 監控 CPU 使用率
+# 監控 CPU 使用率（需要等待 metrics-server 收集數據，約 30-60 秒）
 kubectl top pod -n demo-ghcr
+
+# 替代方法：使用 Prometheus 查詢
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
+# 查詢：rate(container_cpu_usage_seconds_total{namespace="demo-ghcr"}[5m])
 ```
 
 **觸發條件：** CPU > 80% 持續 5 分鐘  
@@ -76,9 +87,9 @@ kubectl top pod -n demo-ghcr
 #### 2.2 記憶體壓力測試
 ```bash
 # 部署記憶體壓力測試
-kubectl run mem-stress --image=alpine/stress-ng \
+kubectl run mem-stress --image=polinux/stress \
   --namespace=demo-ghcr \
-  --restart=Never -- --vm 1 --vm-bytes 200M --timeout 360s
+  --restart=Never -- stress --vm 1 --vm-bytes 200M --timeout 360s
 ```
 
 **觸發條件：** Memory > 80% 持續 5 分鐘  
