@@ -7,155 +7,27 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
-    repoURL: https://prometheus-community.github.io/helm-charts
-    chart: kube-prometheus-stack
-    targetRevision: "57.2.0"
-    helm:
-      values: |
-        prometheus:
-          prometheusSpec:
-            serviceMonitorSelectorNilUsesHelmValues: false
-            serviceMonitorSelector: {}
-            serviceMonitorNamespaceSelector: {}
-            retention: 30d
-            storageSpec:
-              volumeClaimTemplate:
-                spec:
-                  storageClassName: standard
-                  accessModes: ["ReadWriteOnce"]
-                  resources:
-                    requests:
-                      storage: 10Gi
-            resources:
-              limits:
-                cpu: 2000m
-                memory: 8Gi
-              requests:
-                cpu: 100m
-                memory: 512Mi
-          service:
-            type: NodePort
-            nodePort: 30090
-
-        grafana:
-          adminUser: admin
-          adminPassword: admin123
-          
-          persistence:
-            enabled: true
-            storageClassName: standard
-            size: 10Gi
-
-          resources:
-            limits:
-              cpu: 300m
-              memory: 512Mi
-            requests:
-              cpu: 100m
-              memory: 256Mi
-
-          service:
-            type: NodePort
-            nodePort: 30301
-
-          defaultDashboardsEnabled: false
-          defaultDashboardsTimezone: Asia/Taipei
-
-          dashboardProviders:
-            dashboardproviders.yaml:
-              apiVersion: 1
-              providers:
-                - name: "kubernetes"
-                  orgId: 1
-                  folder: "Kubernetes"
-                  type: file
-                  disableDeletion: false
-                  editable: true
-                  options:
-                    path: /var/lib/grafana/dashboards/kubernetes
-
-          dashboards:
-            kubernetes:
-              k8s-views-global:
-                gnetId: 15757
-                datasource: Prometheus
-              k8s-views-namespaces:
-                gnetId: 15758
-                datasource: Prometheus
-              k8s-views-nodes:
-                gnetId: 15759
-                datasource: Prometheus
-              k8s-views-pods:
-                gnetId: 15760
-                datasource: Prometheus
-              k8s-system-apiserver:
-                gnetId: 15761
-                datasource: Prometheus
-              k8s-system-coredns:
-                gnetId: 15762
-                datasource: Prometheus
-              prometheus-k8s-addon:
-                gnetId: 19105
-                datasource: Prometheus
-
-          sidecar:
-            dashboards:
-              enabled: true
-              searchNamespace: ALL
-              folderAnnotation: grafana_folder
-              provider:
-                foldersFromFilesStructure: true
-            datasources:
-              enabled: true
-
-        alertmanager:
-          alertmanagerSpec:
-            storage:
-              volumeClaimTemplate:
-                spec:
-                  storageClassName: standard
-                  accessModes: ["ReadWriteOnce"]
-                  resources:
-                    requests:
-                      storage: 2Gi
-            resources:
-              limits:
-                cpu: 100m
-                memory: 128Mi
-              requests:
-                cpu: 25m
-                memory: 64Mi
-
-        nodeExporter:
-          enabled: true
-
-        kubeStateMetrics:
-          enabled: true
-
-        kubeEtcd:
-          enabled: false
-        kubeControllerManager:
-          enabled: false
-        kubeScheduler:
-          enabled: false
-        kubeProxy:
-          enabled: false
-
-        additionalServiceMonitors:
-          - name: podinfo-monitor
-            selector:
-              matchLabels:
-                app: podinfo
-            namespaceSelector:
-              any: true
-            endpoints:
-              - port: http-metrics
-                interval: 15s
-                path: /metrics
+  
+  # 使用 multiple sources: Helm Chart + Git Repo 的 values.yaml
+  sources:
+    # Source 1: 官方 Prometheus Helm Chart
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: "57.2.0"
+      helm:
+        valueFiles:
+          # 引用 Source 2 (Git Repo) 中的 values.yaml
+          - $values/monitoring/kube-prometheus-stack/values.yaml
+    
+    # Source 2: 你的 Git Repository（提供配置檔案）
+    - repoURL: https://github.com/liu-chun-wu/k8s-Gitops-Prometheus-Grafana.git
+      targetRevision: main
+      ref: values  # 給這個 source 一個引用名稱
+  
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
+    
   syncPolicy:
     automated:
       prune: true

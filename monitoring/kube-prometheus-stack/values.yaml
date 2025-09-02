@@ -21,6 +21,11 @@ prometheus:
       requests:
         cpu: 100m
         memory: 512Mi
+  
+  # 配置 Prometheus 服務為 NodePort
+  service:
+    type: NodePort
+    nodePort: 30090
 
 grafana:
   # 設定固定密碼（僅適用於開發/測試環境）
@@ -102,6 +107,11 @@ grafana:
 
 alertmanager:
   enabled: true
+  
+  # 配置 AlertManager 服務為 NodePort
+  service:
+    type: NodePort
+    nodePort: 30093
   
   # 完整的 AlertManager 配置，包含 Discord 路由
   config:
