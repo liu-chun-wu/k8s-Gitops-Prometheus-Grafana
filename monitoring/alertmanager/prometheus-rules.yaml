@@ -1,0 +1,141 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: podinfo-alerts
+  namespace: monitoring
+  labels:
+    app: kube-prometheus-stack
+    prometheus: kube-prometheus-stack-prometheus
+spec:
+  groups:
+  - name: podinfo.rules
+    interval: 30s
+    rules:
+    
+    # CPU 使用率過高
+    - alert: PodinfoHighCPUUsage
+      expr: |
+        (
+          sum(rate(container_cpu_usage_seconds_total{namespace="podinfo", pod=~"podinfo-.*", container!=""}[5m])) by (pod)
+          / 
+          sum(container_spec_cpu_quota{namespace="podinfo", pod=~"podinfo-.*"}/container_spec_cpu_period{namespace="podinfo", pod=~"podinfo-.*"}) by (pod)
+        ) * 100 > 80
+      for: 5m
+      labels:
+        severity: warning
+        service: podinfo
+      annotations:
+        summary: "Podinfo 高 CPU 使用率 ({{ $labels.pod }})"
+        description: "Pod {{ $labels.pod }} 的 CPU 使用率已超過 80% 持續 5 分鐘 (當前值: {{ $value | humanize }}%)"
+        
+    # 記憶體使用率過高
+    - alert: PodinfoHighMemoryUsage
+      expr: |
+        (
+          sum(container_memory_working_set_bytes{namespace="podinfo", pod=~"podinfo-.*", container!=""}) by (pod)
+          /
+          sum(container_spec_memory_limit_bytes{namespace="podinfo", pod=~"podinfo-.*", container!=""}) by (pod)
+        ) * 100 > 80
+      for: 5m
+      labels:
+        severity: warning
+        service: podinfo
+      annotations:
+        summary: "Podinfo 高記憶體使用率 ({{ $labels.pod }})"
+        description: "Pod {{ $labels.pod }} 的記憶體使用率已超過 80% 持續 5 分鐘 (當前值: {{ $value | humanize }}%)"
+        
+    # Pod 重啟次數過多
+    - alert: PodinfoPodRestartingTooOften
+      expr: |
+        rate(kube_pod_container_status_restarts_total{namespace="podinfo", pod=~"podinfo-.*"}[15m]) > 0.1
+      for: 5m
+      labels:
+        severity: critical
+        service: podinfo
+      annotations:
+        summary: "Podinfo Pod 頻繁重啟 ({{ $labels.pod }})"
+        description: "Pod {{ $labels.pod }} 在過去 15 分鐘內重啟過於頻繁 (重啟率: {{ $value | humanize }} 次/分鐘)"
+        
+    # Pod 不健康
+    - alert: PodinfoPodNotHealthy
+      expr: |
+        kube_pod_status_phase{namespace="podinfo", pod=~"podinfo-.*", phase!="Running"} > 0
+      for: 5m
+      labels:
+        severity: critical
+        service: podinfo
+      annotations:
+        summary: "Podinfo Pod 不健康 ({{ $labels.pod }})"
+        description: "Pod {{ $labels.pod }} 處於非運行狀態已超過 5 分鐘 (當前狀態: {{ $labels.phase }})"
+        
+    # 服務端點不可用
+    - alert: PodinfoServiceDown
+      expr: |
+        up{job="podinfo"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        service: podinfo
+      annotations:
+        summary: "Podinfo 服務無法存取"
+        description: "Podinfo 服務端點無法存取已超過 2 分鐘"
+        
+    # HTTP 請求錯誤率過高
+    - alert: PodinfoHighErrorRate
+      expr: |
+        (
+          sum(rate(http_request_duration_seconds_count{namespace="podinfo", status=~"5.."}[5m])) by (pod)
+          /
+          sum(rate(http_request_duration_seconds_count{namespace="podinfo"}[5m])) by (pod)
+        ) * 100 > 5
+      for: 5m
+      labels:
+        severity: warning
+        service: podinfo
+      annotations:
+        summary: "Podinfo HTTP 錯誤率過高 ({{ $labels.pod }})"
+        description: "Pod {{ $labels.pod }} 的 HTTP 5xx 錯誤率超過 5% 持續 5 分鐘 (當前值: {{ $value | humanize }}%)"
+        
+    # HTTP 請求延遲過高
+    - alert: PodinfoHighLatency
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(http_request_duration_seconds_bucket{namespace="podinfo"}[5m])) by (le, pod)
+        ) > 1
+      for: 5m
+      labels:
+        severity: warning
+        service: podinfo
+      annotations:
+        summary: "Podinfo HTTP 延遲過高 ({{ $labels.pod }})"
+        description: "Pod {{ $labels.pod }} 的 95 分位 HTTP 請求延遲超過 1 秒持續 5 分鐘 (當前值: {{ $value | humanize }}s)"
+        
+    # 部署副本數不足
+    - alert: PodinfoDeploymentReplicasMismatch
+      expr: |
+        kube_deployment_spec_replicas{namespace="podinfo", deployment="podinfo"}
+        !=
+        kube_deployment_status_replicas_available{namespace="podinfo", deployment="podinfo"}
+      for: 10m
+      labels:
+        severity: warning
+        service: podinfo
+      annotations:
+        summary: "Podinfo 部署副本數不匹配"
+        description: "Podinfo 部署的可用副本數 ({{ $labels.replicas_available }}) 與期望副本數 ({{ $labels.spec_replicas }}) 不匹配已超過 10 分鐘"
+        
+    # PVC 空間不足
+    - alert: PodinfoPVCSpaceLow
+      expr: |
+        (
+          kubelet_volume_stats_available_bytes{namespace="podinfo"}
+          /
+          kubelet_volume_stats_capacity_bytes{namespace="podinfo"}
+        ) * 100 < 10
+      for: 5m
+      labels:
+        severity: warning
+        service: podinfo
+      annotations:
+        summary: "Podinfo PVC 空間不足"
+        description: "PVC {{ $labels.persistentvolumeclaim }} 可用空間少於 10% (剩餘: {{ $value | humanize }}%)"

@@ -101,6 +101,81 @@ grafana:
       enabled: true
 
 alertmanager:
+  enabled: true
+  
+  # 完整的 AlertManager 配置，包含 Discord 路由
+  config:
+    global:
+      resolve_timeout: 5m
+    
+    receivers:
+    - name: 'null'
+    
+    - name: 'discord-critical'
+      webhook_configs:
+      - url: 'http://alertmanager-discord:9094'
+        send_resolved: true
+        
+    - name: 'discord-warning'
+      webhook_configs:
+      - url: 'http://alertmanager-discord:9094'
+        send_resolved: true
+        
+    - name: 'discord-info'
+      webhook_configs:
+      - url: 'http://alertmanager-discord:9094'
+        send_resolved: true
+    
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: 'null'
+      
+      routes:
+      - match:
+          alertname: Watchdog
+        receiver: 'null'
+        
+      - match:
+          severity: critical
+        receiver: 'discord-critical'
+        group_wait: 10s
+        repeat_interval: 1h
+        
+      - match:
+          severity: warning
+        receiver: 'discord-warning'
+        group_wait: 30s
+        repeat_interval: 4h
+        
+      - match:
+          severity: info
+        receiver: 'discord-info'
+        group_wait: 1m
+        repeat_interval: 24h
+        
+      - match_re:
+          service: podinfo.*
+        receiver: 'discord-warning'
+        group_by: ['alertname', 'pod']
+        group_wait: 10s
+        repeat_interval: 2h
+    
+    inhibit_rules:
+    - source_match:
+        severity: 'critical'
+      target_match_re:
+        severity: 'warning|info'
+      equal: ['alertname', 'namespace']
+      
+    - source_match:
+        severity: 'warning'
+      target_match:
+        severity: 'info'
+      equal: ['alertname', 'namespace']
+  
   alertmanagerSpec:
     storage:
       volumeClaimTemplate:

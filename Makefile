@@ -5,6 +5,9 @@
         build-local develop-local \
         release-ghcr check-sync-strict wait-for-actions sync-actions-changes release-status \
         deploy-app-local deploy-app-ghcr deploy-monitoring \
+        alert-install alert-uninstall alert-update-webhook alert-reinstall alert-status \
+        test-alert-instant clean-instant-alerts test-alert clean-test-alerts \
+        setup-discord deploy-alerting \
         status verify access logs check-git-status pause-services resume-services
 
 #=============================================================================
@@ -82,6 +85,15 @@ help: ## Show all available commands
 	@echo "  $(CYAN)argocd-config$(RESET)      Configure ArgoCD"
 	@echo "  $(CYAN)ingress-install$(RESET)    Install NGINX Ingress Controller"
 	@echo "  $(CYAN)ingress-config$(RESET)     Configure Ingress rules"
+	@echo ""
+	@echo "$(GREEN)🔔 Alert Management$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "  $(CYAN)alert-install$(RESET)      Install alerting system with Discord"
+	@echo "  $(CYAN)alert-uninstall$(RESET)    Remove alerting system"
+	@echo "  $(CYAN)alert-update-webhook$(RESET) Update Discord webhook URL"
+	@echo "  $(CYAN)alert-reinstall$(RESET)    Reinstall (for webhook changes)"
+	@echo "  $(CYAN)alert-status$(RESET)       Check alerting system status"
+	@echo "  $(CYAN)test-alert-instant$(RESET) Deploy instantly triggering test"
 	@echo ""
 	@echo "$(GREEN)📋 Operations$(RESET)"
 	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
@@ -431,6 +443,111 @@ deploy-monitoring: ## Deploy Prometheus and Grafana monitoring stack
 			echo "$(YELLOW)⚠️  Monitoring stack may still be syncing$(RESET)"; \
 	fi
 	@echo "$(GREEN)✅ Monitoring stack deployed!$(RESET)"
+
+#=============================================================================
+# ALERTING COMMANDS
+#=============================================================================
+alert-install: ## Install complete alerting system with Discord webhook
+	@echo "$(CYAN)🔔 Installing alerting system...$(RESET)"
+	@if [ ! -f .env ]; then \
+		echo "$(RED)❌ .env file not found!$(RESET)"; \
+		echo "$(YELLOW)Please run: cp .env.example .env$(RESET)"; \
+		echo "$(YELLOW)Then edit .env with your Discord webhook URL$(RESET)"; \
+		exit 1; \
+	fi
+	$(call execute_cmd, ./scripts/manage-alerts.sh install)
+	@echo "$(GREEN)✅ Alerting system installed!$(RESET)"
+
+alert-uninstall: ## Completely remove alerting system
+	@echo "$(YELLOW)🗑️  Uninstalling alerting system...$(RESET)"
+	$(call execute_cmd, ./scripts/manage-alerts.sh uninstall)
+	@echo "$(GREEN)✅ Alerting system removed!$(RESET)"
+
+alert-update-webhook: ## Update Discord webhook URL only
+	@echo "$(CYAN)🔄 Updating Discord webhook...$(RESET)"
+	@if [ ! -f .env ]; then \
+		echo "$(RED)❌ .env file not found!$(RESET)"; \
+		echo "$(YELLOW)Please run: cp .env.example .env$(RESET)"; \
+		echo "$(YELLOW)Then edit .env with your Discord webhook URL$(RESET)"; \
+		exit 1; \
+	fi
+	$(call execute_cmd, ./scripts/manage-alerts.sh update-webhook)
+	@echo "$(GREEN)✅ Discord webhook updated!$(RESET)"
+
+alert-reinstall: ## Reinstall alerting system (for webhook changes)
+	@echo "$(CYAN)♻️  Reinstalling alerting system...$(RESET)"
+	@if [ ! -f .env ]; then \
+		echo "$(RED)❌ .env file not found!$(RESET)"; \
+		echo "$(YELLOW)Please run: cp .env.example .env$(RESET)"; \
+		echo "$(YELLOW)Then edit .env with your new Discord webhook URL$(RESET)"; \
+		exit 1; \
+	fi
+	$(call execute_cmd, ./scripts/manage-alerts.sh reinstall)
+	@echo "$(GREEN)✅ Alerting system reinstalled with new webhook!$(RESET)"
+
+alert-status: ## Check alerting system status
+	@echo "$(CYAN)📊 Checking alerting system status...$(RESET)"
+	@./scripts/manage-alerts.sh status
+
+test-alert-instant: ## Deploy instantly triggering test alerts
+	@echo "$(CYAN)🚀 Deploying instant test alerts...$(RESET)"
+	$(call execute_cmd, kubectl apply -f monitoring/alertmanager/test-alert-instant.yaml)
+	@if [ "$(DRY_RUN)" != "1" ]; then \
+		echo "$(GREEN)✅ Instant test alert deployed!$(RESET)"; \
+		echo ""; \
+		echo "$(CYAN)⏱️  Expected trigger times:$(RESET)"; \
+		echo "  • InstantTestAlert: $(GREEN)Immediately$(RESET)"; \
+		echo "  • TestAlertInfo10s: $(YELLOW)After 10 seconds$(RESET)"; \
+		echo "  • TestAlertWarning30s: $(YELLOW)After 30 seconds$(RESET)"; \
+		echo "  • TimeBasedTestAlert: $(YELLOW)After 1 minute$(RESET)"; \
+		echo ""; \
+		echo "$(CYAN)💬 Check your Discord channel for notifications$(RESET)"; \
+		echo ""; \
+		echo "$(YELLOW)Monitor alerts:$(RESET)"; \
+		echo "  kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090"; \
+		echo "  Open: http://localhost:9090/alerts"; \
+		echo ""; \
+		echo "$(CYAN)💡 Run 'make clean-instant-alerts' when done testing$(RESET)"; \
+	fi
+
+clean-instant-alerts: ## Remove instant test alert rules
+	@echo "$(CYAN)🧹 Cleaning up instant test alerts...$(RESET)"
+	$(call execute_cmd, kubectl delete -f monitoring/alertmanager/test-alert-instant.yaml --ignore-not-found=true)
+	@echo "$(GREEN)✅ Instant test alerts cleaned up!$(RESET)"
+
+# Legacy commands (kept for backward compatibility)
+setup-discord: ## [DEPRECATED] Use 'make alert-install' instead
+	@echo "$(YELLOW)⚠️  This command is deprecated. Use 'make alert-install' instead$(RESET)"
+	@$(MAKE) alert-install
+
+deploy-alerting: ## [DEPRECATED] Use 'make alert-install' instead
+	@echo "$(YELLOW)⚠️  This command is deprecated. Use 'make alert-install' instead$(RESET)"
+	@$(MAKE) alert-install
+
+test-alert: ## Send test alert to Discord (1-2 minute delay)
+	@echo "$(CYAN)🧪 Deploying test alert (1-2 minute delay)...$(RESET)"
+	$(call execute_cmd, kubectl apply -f monitoring/alertmanager/test-alert.yaml)
+	@if [ "$(DRY_RUN)" != "1" ]; then \
+		echo "$(CYAN)⏳ Test alert will trigger in 1-2 minutes...$(RESET)"; \
+		echo "$(CYAN)💬 Check your Discord channel for notifications$(RESET)"; \
+		echo ""; \
+		echo "$(YELLOW)監控警報狀態:$(RESET)"; \
+		echo "  Prometheus: http://localhost:9090/alerts"; \
+		echo "  AlertManager: http://localhost:9093"; \
+		echo ""; \
+		echo "$(YELLOW)Port forwarding (在新終端執行):$(RESET)"; \
+		echo "  kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090"; \
+		echo "  kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager 9093:9093"; \
+		echo ""; \
+		echo "$(CYAN)💡 Run 'make clean-test-alerts' when done testing$(RESET)"; \
+	fi
+	@echo "$(GREEN)✅ Test alert deployed!$(RESET)"
+
+clean-test-alerts: ## Remove all test alert rules
+	@echo "$(CYAN)🧹 Cleaning up all test alerts...$(RESET)"
+	$(call execute_cmd, kubectl delete -f monitoring/alertmanager/test-alert.yaml --ignore-not-found=true)
+	$(call execute_cmd, kubectl delete -f monitoring/alertmanager/test-alert-instant.yaml --ignore-not-found=true)
+	@echo "$(GREEN)✅ All test alerts cleaned up!$(RESET)"
 
 #=============================================================================
 # UTILITIES

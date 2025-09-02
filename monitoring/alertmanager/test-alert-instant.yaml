@@ -1,0 +1,161 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: test-instant-alert
+  namespace: monitoring
+  labels:
+    app: kube-prometheus-stack
+    prometheus: kube-prometheus-stack-prometheus
+spec:
+  groups:
+  - name: instant.test.alerts
+    interval: 10s  # 每10秒評估一次
+    rules:
+    
+    # 立即觸發的測試警報 - 0秒延遲
+    - alert: InstantTestAlert
+      expr: vector(1) > 0
+      for: 0s  # 立即觸發，不需等待
+      labels:
+        severity: info
+        service: test
+        test_type: instant
+      annotations:
+        summary: "🚀 立即測試警報"
+        description: "這是一個立即觸發的測試警報，用於驗證 Discord 通知是否正常運作。此警報會在部署後立即觸發。"
+        
+    # 10秒後觸發的 Info 警報
+    - alert: TestAlertInfo10s
+      expr: vector(1) > 0
+      for: 10s
+      labels:
+        severity: info
+        service: test
+        test_type: delayed
+      annotations:
+        summary: "ℹ️ Info 測試警報 (10秒延遲)"
+        description: "這是一個 Info 級別的測試警報，會在條件滿足 10 秒後觸發。"
+        
+    # 30秒後觸發的 Warning 警報
+    - alert: TestAlertWarning30s
+      expr: vector(1) > 0
+      for: 30s
+      labels:
+        severity: warning
+        service: test
+        test_type: delayed
+      annotations:
+        summary: "⚠️ Warning 測試警報 (30秒延遲)"
+        description: "這是一個 Warning 級別的測試警報，會在條件滿足 30 秒後觸發。"
+        
+    # Critical 警報 - 預設不觸發，需手動修改
+    - alert: TestAlertCritical
+      expr: vector(1) > 2  # 永遠為假，不會觸發
+      for: 0s
+      labels:
+        severity: critical
+        service: test
+        test_type: manual
+      annotations:
+        summary: "🚨 Critical 測試警報 (手動觸發)"
+        description: "這是一個 Critical 級別的測試警報。要觸發此警報，請將 expr 改為 'vector(1) > 0'"
+        
+    # 模擬真實條件的警報 - 基於時間
+    - alert: TimeBasedTestAlert
+      expr: (hour() >= 0 and hour() <= 23)  # 總是為真
+      for: 1m
+      labels:
+        severity: info
+        service: test
+        test_type: time_based
+      annotations:
+        summary: "⏰ 基於時間的測試警報"
+        description: "這個警報模擬基於時間條件的真實警報，會在條件持續 1 分鐘後觸發。"
+        
+    # 可控制的測試警報 - 使用不存在的指標
+    - alert: ControllableTestAlert
+      expr: |
+        (test_alert_trigger{enabled="true"} == 1) 
+        or 
+        on() vector(0)  # 預設返回 0（不觸發）
+      for: 0s
+      labels:
+        severity: warning
+        service: test
+        test_type: controllable
+      annotations:
+        summary: "🎮 可控制的測試警報"
+        description: "這個警報可以通過創建 test_alert_trigger 指標來控制觸發。"
+        
+---
+# 測試說明 ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: instant-alert-test-instructions
+  namespace: monitoring
+data:
+  README.md: |
+    # 立即觸發測試警報使用說明
+    
+    ## 警報觸發時間說明
+    
+    | 警報名稱 | 觸發延遲 | 嚴重級別 | 說明 |
+    |---------|---------|---------|------|
+    | InstantTestAlert | 0秒 | info | 立即觸發 |
+    | TestAlertInfo10s | 10秒 | info | 延遲10秒 |
+    | TestAlertWarning30s | 30秒 | warning | 延遲30秒 |
+    | TimeBasedTestAlert | 60秒 | info | 延遲1分鐘 |
+    | TestAlertCritical | 手動 | critical | 需手動啟用 |
+    
+    ## 部署測試警報
+    
+    ```bash
+    # 部署立即觸發的測試警報
+    kubectl apply -f monitoring/alertmanager/test-alert-instant.yaml
+    
+    # 或使用 Makefile
+    make test-alert-instant
+    ```
+    
+    ## 監控警報狀態
+    
+    ```bash
+    # 查看 Prometheus 中的警報
+    kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
+    # 訪問 http://localhost:9090/alerts
+    
+    # 查看 AlertManager
+    kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager 9093:9093
+    # 訪問 http://localhost:9093
+    ```
+    
+    ## 手動觸發 Critical 警報
+    
+    ```bash
+    # 編輯警報規則
+    kubectl edit prometheusrule test-instant-alert -n monitoring
+    
+    # 找到 TestAlertCritical，將 expr 改為：
+    # expr: vector(1) > 0
+    ```
+    
+    ## 清理測試警報
+    
+    ```bash
+    kubectl delete prometheusrule test-instant-alert -n monitoring
+    ```
+    
+    ## 警報觸發原理
+    
+    1. **expr**: 定義觸發條件的 PromQL 表達式
+       - `vector(1) > 0` 總是為真
+       - `vector(1) > 2` 總是為假
+    
+    2. **for**: 條件必須持續多久才觸發
+       - `0s` = 立即觸發
+       - `10s` = 條件為真持續10秒後觸發
+       - `1m` = 條件為真持續1分鐘後觸發
+    
+    3. **interval**: 規則評估頻率
+       - 設為 `10s` 表示每10秒檢查一次條件

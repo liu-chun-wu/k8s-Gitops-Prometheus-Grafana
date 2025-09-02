@@ -1,0 +1,115 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alertmanager-main
+  namespace: monitoring
+type: Opaque
+stringData:
+  alertmanager.yaml: |
+    global:
+      resolve_timeout: 5m
+      
+    # 定義通知模板
+    templates:
+    - '/etc/alertmanager/config/*.tmpl'
+    
+    # 接收器配置
+    receivers:
+    # 預設接收器（不發送通知）
+    - name: 'null'
+    
+    # Discord 接收器
+    - name: 'discord-critical'
+      webhook_configs:
+      - url: 'http://alertmanager-discord:9094'
+        send_resolved: true
+        http_config:
+          tls_config:
+            insecure_skip_verify: true
+        title: '🚨 緊急警報'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        
+    - name: 'discord-warning'
+      webhook_configs:
+      - url: 'http://alertmanager-discord:9094'
+        send_resolved: true
+        http_config:
+          tls_config:
+            insecure_skip_verify: true
+        title: '⚠️ 警告通知'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        
+    - name: 'discord-info'
+      webhook_configs:
+      - url: 'http://alertmanager-discord:9094'
+        send_resolved: true
+        http_config:
+          tls_config:
+            insecure_skip_verify: true
+        title: 'ℹ️ 資訊通知'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+    
+    # 路由配置
+    route:
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: 'null'
+      
+      routes:
+      # Watchdog 警報（健康檢查）靜音
+      - match:
+          alertname: Watchdog
+        receiver: 'null'
+        continue: false
+        
+      # 依嚴重性分配不同接收器
+      - match:
+          severity: critical
+        receiver: 'discord-critical'
+        group_wait: 10s
+        repeat_interval: 1h
+        
+      - match:
+          severity: warning
+        receiver: 'discord-warning'
+        group_wait: 30s
+        repeat_interval: 4h
+        
+      - match:
+          severity: info
+        receiver: 'discord-info'
+        group_wait: 1m
+        repeat_interval: 24h
+        
+      # 應用程式特定路由
+      - match_re:
+          service: podinfo.*
+        receiver: 'discord-warning'
+        group_by: ['alertname', 'pod']
+        group_wait: 10s
+        repeat_interval: 2h
+    
+    # 抑制規則（避免重複警報）
+    inhibit_rules:
+    # Critical 警報抑制 warning 和 info
+    - source_match:
+        severity: 'critical'
+      target_match_re:
+        severity: 'warning|info'
+      equal: ['alertname', 'namespace']
+      
+    # Warning 警報抑制 info
+    - source_match:
+        severity: 'warning'
+      target_match:
+        severity: 'info'
+      equal: ['alertname', 'namespace']
+      
+    # 同 namespace 的 InfoInhibitor 抑制所有 info 警報
+    - source_match:
+        alertname: 'InfoInhibitor'
+      target_match:
+        severity: 'info'
+      equal: ['namespace']
