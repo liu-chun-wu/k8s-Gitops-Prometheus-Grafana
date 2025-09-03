@@ -152,26 +152,26 @@ alertmanager:
           severity: critical
         receiver: 'discord-critical'
         group_wait: 10s
-        repeat_interval: 1h
+        repeat_interval: 2m
         
       - match:
           severity: warning
         receiver: 'discord-warning'
         group_wait: 30s
-        repeat_interval: 4h
+        repeat_interval: 2m
         
       - match:
           severity: info
         receiver: 'discord-info'
         group_wait: 1m
-        repeat_interval: 24h
+        repeat_interval: 2m
         
       - match_re:
           service: podinfo.*
         receiver: 'discord-warning'
         group_by: ['alertname', 'pod']
         group_wait: 10s
-        repeat_interval: 2h
+        repeat_interval: 2m
     
     inhibit_rules:
     - source_match:
