@@ -11,7 +11,7 @@ type: Opaque
 stringData:
   alertmanager.yaml: |
     global:
-      resolve_timeout: 5m
+      resolve_timeout: 1m
       
     # 定義通知模板
     templates:
@@ -56,9 +56,9 @@ stringData:
     # 路由配置
     route:
       group_by: ['alertname', 'cluster', 'service']
-      group_wait: 30s
-      group_interval: 5m
-      repeat_interval: 12h
+      group_wait: 5s
+      group_interval: 15s
+      repeat_interval: 1m
       receiver: 'null'
       
       routes:
@@ -72,28 +72,28 @@ stringData:
       - match:
           severity: critical
         receiver: 'discord-critical'
-        group_wait: 10s
-        repeat_interval: 2m
+        group_wait: 5s
+        repeat_interval: 1m
         
       - match:
           severity: warning
         receiver: 'discord-warning'
-        group_wait: 30s
-        repeat_interval: 2m
+        group_wait: 5s
+        repeat_interval: 1m
         
       - match:
           severity: info
         receiver: 'discord-info'
-        group_wait: 1m
-        repeat_interval: 2m
+        group_wait: 5s
+        repeat_interval: 1m
         
       # 應用程式特定路由
       - match_re:
           service: podinfo.*
         receiver: 'discord-warning'
         group_by: ['alertname', 'pod']
-        group_wait: 10s
-        repeat_interval: 2m
+        group_wait: 5s
+        repeat_interval: 1m
     
     # 抑制規則（避免重複警報）
     inhibit_rules:

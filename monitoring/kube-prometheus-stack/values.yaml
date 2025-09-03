@@ -116,7 +116,7 @@ alertmanager:
   # 完整的 AlertManager 配置，包含 Discord 路由
   config:
     global:
-      resolve_timeout: 5m
+      resolve_timeout: 1m
     
     receivers:
     - name: 'null'
@@ -138,9 +138,9 @@ alertmanager:
     
     route:
       group_by: ['alertname', 'cluster', 'service']
-      group_wait: 30s
-      group_interval: 5m
-      repeat_interval: 12h
+      group_wait: 5s
+      group_interval: 15s
+      repeat_interval: 1m
       receiver: 'null'
       
       routes:
@@ -151,27 +151,27 @@ alertmanager:
       - match:
           severity: critical
         receiver: 'discord-critical'
-        group_wait: 10s
-        repeat_interval: 2m
+        group_wait: 5s
+        repeat_interval: 1m
         
       - match:
           severity: warning
         receiver: 'discord-warning'
-        group_wait: 30s
-        repeat_interval: 2m
+        group_wait: 5s
+        repeat_interval: 1m
         
       - match:
           severity: info
         receiver: 'discord-info'
-        group_wait: 1m
-        repeat_interval: 2m
+        group_wait: 5s
+        repeat_interval: 1m
         
       - match_re:
           service: podinfo.*
         receiver: 'discord-warning'
         group_by: ['alertname', 'pod']
-        group_wait: 10s
-        repeat_interval: 2m
+        group_wait: 5s
+        repeat_interval: 1m
     
     inhibit_rules:
     - source_match:
