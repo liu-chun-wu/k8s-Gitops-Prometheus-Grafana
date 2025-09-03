@@ -78,7 +78,7 @@ grafana:
         gnetId: 15758
         datasource: Prometheus
       k8s-views-nodes:
-        gnetId: 15759
+        gnetId: 1860  # Node Exporter Full dashboard - more compatible with containerd
         datasource: Prometheus
       k8s-views-pods:
         gnetId: 15760
