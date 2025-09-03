@@ -71,26 +71,20 @@ grafana:
   # 這些條目會被轉成 ConfigMap，並由 sidecar 送入上面的 providers 路徑
   dashboards:
     kubernetes:
-      k8s-views-global:
-        gnetId: 15757
+      k8s-node-metrics:
+        gnetId: 11074  # Node Exporter Dashboard - Production ready, no Angular
         datasource: Prometheus
-      k8s-views-namespaces:
-        gnetId: 15758
+      k8s-node-overview:
+        gnetId: 13978  # Node Exporter Quickstart - Modern, no Angular
         datasource: Prometheus
-      k8s-views-nodes:
-        gnetId: 1860  # Node Exporter Full dashboard - more compatible with containerd
+      k8s-cluster-overview:
+        gnetId: 13702  # Node Exporter Resources Overview
         datasource: Prometheus
-      k8s-views-pods:
-        gnetId: 15760
-        datasource: Prometheus
-      k8s-system-apiserver:
-        gnetId: 15761
-        datasource: Prometheus
-      k8s-system-coredns:
-        gnetId: 15762
+      k8s-container-metrics:
+        gnetId: 13077  # Kubernetes Monitoring (kubelet + node-exporter)
         datasource: Prometheus
       prometheus-k8s-addon:
-        gnetId: 19105
+        gnetId: 19105  # Prometheus monitoring - React-based
         datasource: Prometheus
 
   sidecar:
