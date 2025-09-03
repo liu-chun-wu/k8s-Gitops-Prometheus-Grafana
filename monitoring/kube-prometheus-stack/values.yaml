@@ -71,17 +71,12 @@ grafana:
   # 這些條目會被轉成 ConfigMap，並由 sidecar 送入上面的 providers 路徑
   dashboards:
     kubernetes:
-      k8s-node-metrics:
-        gnetId: 11074  # Node Exporter Dashboard - Production ready, no Angular
-        datasource: Prometheus
-      k8s-node-overview:
-        gnetId: 13978  # Node Exporter Quickstart - Modern, no Angular
+      # 使用 2024-2025 年最新的 dashboards，確保不含 Angular
+      k8s-node-metrics-2025:
+        gnetId: 22413  # K8s Node Metrics Multi Clusters - Grafana 11 (2025)
         datasource: Prometheus
       k8s-cluster-overview:
         gnetId: 13702  # Node Exporter Resources Overview
-        datasource: Prometheus
-      k8s-container-metrics:
-        gnetId: 13077  # Kubernetes Monitoring (kubelet + node-exporter)
         datasource: Prometheus
       prometheus-k8s-addon:
         gnetId: 19105  # Prometheus monitoring - React-based
