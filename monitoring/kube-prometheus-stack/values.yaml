@@ -81,34 +81,25 @@ grafana:
             path: /var/lib/grafana/dashboards/kubernetes
 
   # 這些條目會被轉成 ConfigMap，並由 sidecar 送入上面的 providers 路徑
-  # Dashboard 配置說明：
-  # 使用 datasource 和 datasourceUid 確保正確的資料來源連結
+  # Dashboard 配置說明：使用簡單的字串格式指定 datasource
   dashboards:
     kubernetes:
       k8s-api-server:
         gnetId: 15761  # Kubernetes / System / API Server
         revision: 3
-        datasource:
-          uid: prometheus
-          type: prometheus
+        datasource: Prometheus
       dashboard-21012:
         gnetId: 21012  # Mixin / Compute Resources / Namespace (Pods)
         revision: 1
-        datasource:
-          uid: prometheus
-          type: prometheus
+        datasource: Prometheus
       dashboard-21016:
         gnetId: 21016  # Mixin / Compute Resources / Namespace (Workloads)
         revision: 1
-        datasource:
-          uid: prometheus
-          type: prometheus
+        datasource: Prometheus
       node-exporter-full:
         gnetId: 1860  # Node Exporter Full - 經典的系統監控 dashboard
         revision: 37
-        datasource:
-          uid: prometheus
-          type: prometheus
+        datasource: Prometheus
 
   sidecar:
     # 讓 sidecar 幫你自動載入 dashboards / datasources（包含外部 CM）
@@ -121,8 +112,6 @@ grafana:
         foldersFromFilesStructure: true
     datasources:
       enabled: true
-      # 禁用默認資料來源，使用我們自己定義的
-      defaultDatasourceEnabled: false
 
 alertmanager:
   enabled: true

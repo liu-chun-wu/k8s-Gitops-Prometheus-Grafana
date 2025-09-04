@@ -18,6 +18,7 @@ make -f Makefile.enhanced quickstart-ghcr-complete
 ```
 
 This command will:
+
 - ✅ Create Kind cluster
 - ✅ Install and configure ArgoCD
 - ✅ Install NGINX Ingress Controller
@@ -46,6 +47,7 @@ make -f Makefile.enhanced status-complete
 ```
 
 Shows:
+
 - ArgoCD pod status
 - Complete monitoring stack status
 - **Discord alerting status**
@@ -60,6 +62,7 @@ make -f Makefile.enhanced resume-services-complete
 ```
 
 Resumes:
+
 - All ArgoCD components
 - All monitoring components
 - **Discord alertmanager service**
@@ -67,6 +70,7 @@ Resumes:
 - Ingress controller
 
 With health checks for:
+
 - ArgoCD server and controller
 - Grafana, Prometheus, AlertManager
 - **Discord alerting service**
@@ -79,6 +83,7 @@ make -f Makefile.enhanced access-complete
 ```
 
 Shows:
+
 - All service URLs
 - All credentials
 - **Discord webhook configuration status**
@@ -110,12 +115,14 @@ Shows:
    - Copy the webhook URL
 
 2. Configure the webhook:
+
    ```bash
    cp .env.example .env
    # Edit .env and add your webhook URL
    ```
 
 3. Install alerting (if not done by complete setup):
+
    ```bash
    make alert-install
    ```
@@ -135,16 +142,19 @@ make test-alert
 ### Discord Alerting Not Working
 
 1. Check if Discord service is running:
+
    ```bash
    kubectl get pods -n monitoring | grep discord
    ```
 
 2. Check logs:
+
    ```bash
    kubectl logs -n monitoring deployment/alertmanager-discord
    ```
 
 3. Verify webhook secret:
+
    ```bash
    kubectl get secret discord-webhook -n monitoring
    ```
@@ -152,6 +162,7 @@ make test-alert
 ### Missing Components After Resume
 
 Run the complete resume command:
+
 ```bash
 make -f Makefile.enhanced resume-services-complete
 ```
@@ -166,6 +177,7 @@ echo "include Makefile.enhanced" >> Makefile
 ```
 
 Then you can use:
+
 ```bash
 make quickstart-ghcr-complete
 make resume-services-complete
@@ -176,10 +188,10 @@ make status-complete
 
 After running `quickstart-ghcr-complete`, verify:
 
-- [ ] ArgoCD accessible at http://argocd.local
-- [ ] Grafana accessible at http://localhost:30301
-- [ ] Prometheus accessible at http://localhost:30090
-- [ ] AlertManager accessible at http://localhost:30093
+- [ ] ArgoCD accessible at <http://argocd.local>
+- [ ] Grafana accessible at <http://localhost:30301>
+- [ ] Prometheus accessible at <http://localhost:30090>
+- [ ] AlertManager accessible at <http://localhost:30093>
 - [ ] Discord webhook configured (check with `kubectl get secret discord-webhook -n monitoring`)
 - [ ] Alert rules applied (check Prometheus → Alerts)
 - [ ] Test alert received in Discord channel
@@ -193,6 +205,7 @@ After running `quickstart-ghcr-complete`, verify:
 ## 🤝 Contributing
 
 When adding new features, ensure they are:
+
 1. Added to `quickstart-ghcr-complete`
 2. Included in `resume-services-complete`
 3. Checked in `status-complete`
