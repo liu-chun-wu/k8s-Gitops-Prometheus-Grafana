@@ -53,6 +53,18 @@ grafana:
   defaultDashboardsEnabled: false
   defaultDashboardsTimezone: Asia/Taipei
 
+  # 配置額外的 datasource 以支援 dashboard 的變數需求
+  additionalDataSources:
+    - name: Prometheus
+      uid: prometheus
+      type: prometheus
+      access: proxy
+      isDefault: true
+      url: http://kube-prometheus-stack-prometheus:9090/
+      jsonData:
+        timeInterval: 30s
+        httpMethod: POST
+
   # ⬇️ 重點：用 helm chart 內建機制自動匯入最新版儀表板（非 Angular）
   dashboardProviders:
     dashboardproviders.yaml:
@@ -69,21 +81,34 @@ grafana:
             path: /var/lib/grafana/dashboards/kubernetes
 
   # 這些條目會被轉成 ConfigMap，並由 sidecar 送入上面的 providers 路徑
+  # Dashboard 配置說明：
+  # 使用 datasource 和 datasourceUid 確保正確的資料來源連結
   dashboards:
     kubernetes:
-      # 精選的 dashboards 配置
       k8s-api-server:
         gnetId: 15761  # Kubernetes / System / API Server
-        datasource: Prometheus
+        revision: 3
+        datasource:
+          uid: prometheus
+          type: prometheus
       dashboard-21012:
-        gnetId: 21012  # Dashboard ID 21012
-        datasource: Prometheus
+        gnetId: 21012  # Mixin / Compute Resources / Namespace (Pods)
+        revision: 1
+        datasource:
+          uid: prometheus
+          type: prometheus
       dashboard-21016:
-        gnetId: 21016  # Dashboard ID 21016
-        datasource: Prometheus
+        gnetId: 21016  # Mixin / Compute Resources / Namespace (Workloads)
+        revision: 1
+        datasource:
+          uid: prometheus
+          type: prometheus
       node-exporter-full:
         gnetId: 1860  # Node Exporter Full - 經典的系統監控 dashboard
-        datasource: Prometheus
+        revision: 37
+        datasource:
+          uid: prometheus
+          type: prometheus
 
   sidecar:
     # 讓 sidecar 幫你自動載入 dashboards / datasources（包含外部 CM）
@@ -96,6 +121,8 @@ grafana:
         foldersFromFilesStructure: true
     datasources:
       enabled: true
+      # 禁用默認資料來源，使用我們自己定義的
+      defaultDatasourceEnabled: false
 
 alertmanager:
   enabled: true
