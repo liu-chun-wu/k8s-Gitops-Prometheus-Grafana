@@ -49,8 +49,8 @@ grafana:
     type: NodePort
     nodePort: 30301
 
-  # 預設套件儀表板先關閉，改用下方「現代化」儀表板
-  defaultDashboardsEnabled: false
+  # 啟用預設套件儀表板
+  defaultDashboardsEnabled: true
   defaultDashboardsTimezone: Asia/Taipei
 
   # 配置額外的 datasource 以支援 dashboard 的變數需求
@@ -65,48 +65,10 @@ grafana:
         timeInterval: 30s
         httpMethod: POST
 
-  # ⬇️ 重點：用 helm chart 內建機制自動匯入最新版儀表板（非 Angular）
-  dashboardProviders:
-    dashboardproviders.yaml:
-      apiVersion: 1
-      providers:
-        - name: "kubernetes"
-          orgId: 1
-          folder: "Kubernetes"
-          type: file
-          disableDeletion: false
-          editable: true
-          options:
-            # 固定使用官方建議的路徑規則 /var/lib/grafana/dashboards/<provider_name>
-            path: /var/lib/grafana/dashboards/kubernetes
-
-  # 這些條目會被轉成 ConfigMap，並由 sidecar 送入上面的 providers 路徑
-  # Dashboard 配置說明：使用簡單的字串格式指定 datasource
-  # 註：移除 k8s-api-server 因為它產生重複的舊版本
-  dashboards:
-    kubernetes:
-      dashboard-21012:
-        gnetId: 21012  # Mixin / Compute Resources / Namespace (Pods)
-        revision: 1
-        datasource: Prometheus
-      dashboard-21016:
-        gnetId: 21016  # Mixin / Compute Resources / Namespace (Workloads)
-        revision: 1
-        datasource: Prometheus
-      node-exporter-full:
-        gnetId: 1860  # Node Exporter Full - 經典的系統監控 dashboard
-        revision: 37
-        datasource: Prometheus
 
   sidecar:
-    # 讓 sidecar 幫你自動載入 dashboards / datasources（包含外部 CM）
     dashboards:
       enabled: true
-      searchNamespace: ALL
-      # 可用 annotation 指定儀表板資料夾
-      folderAnnotation: grafana_folder
-      provider:
-        foldersFromFilesStructure: true
     datasources:
       enabled: true
 
