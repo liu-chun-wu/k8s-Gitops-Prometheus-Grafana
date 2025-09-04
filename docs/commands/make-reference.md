@@ -55,7 +55,8 @@
 
 | Command | Description | Output |
 |---------|-------------|--------|
-| `make status` | System overview | Pod status |
+| `make status` | System overview | Pod status + metrics API |
+| `make metrics-status` | Metrics-server health | Resource monitoring status |
 | `make logs` | ArgoCD logs | Recent logs |
 | `make access` | Show all service URLs | URLs and credentials |
 
@@ -112,6 +113,7 @@ export REGISTRY_PORT=5002
 2. `make quickstart` (choose local or GHCR)
 3. `sudo sh -c 'echo "127.0.0.1 argocd.local" >> /etc/hosts'`
 4. `make access` (get URLs and credentials)
+5. `kubectl top nodes` (verify resource monitoring works)
 
 ### Daily Development
 
@@ -128,9 +130,10 @@ export REGISTRY_PORT=5002
 ### Troubleshooting
 
 1. `make status` (system overview)
-2. `make logs` (ArgoCD logs)
-3. `make resume-services` (if services paused)
-4. `make clean && make quickstart` (nuclear option)
+2. `make metrics-status` (check resource monitoring)
+3. `make logs` (ArgoCD logs)
+4. `make resume-services` (if services paused)
+5. `make clean && make quickstart` (nuclear option)
 
 ### Maintenance
 
@@ -215,6 +218,8 @@ These commands are used internally by quickstart and other workflows. You typica
 | `make cluster-delete` | Delete Kind cluster | Internal cleanup |
 | `make registry-setup` | Setup local Docker registry | Internal setup |
 | `make registry-test` | Test local registry connectivity | Internal validation |
+| `make metrics-install` | Install metrics-server for kubectl top | Infrastructure setup |
+| `make metrics-status` | Check metrics-server status | Health checking |
 
 ### ArgoCD Setup
 

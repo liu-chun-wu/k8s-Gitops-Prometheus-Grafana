@@ -41,6 +41,27 @@
 | `kubectl top pods -A` | All pods resource usage | Cluster-wide |
 | `kubectl top pods -n <namespace>` | Namespace pod resources | Specific namespace |
 
+**Note**: Metrics-server is automatically installed with `make quickstart` commands.
+
+#### Example Output
+
+```bash
+# Node resource usage
+$ kubectl top nodes
+NAME                        CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)
+gitops-demo-control-plane   407m         5%       1398Mi          35%
+gitops-demo-worker          293m         3%       1120Mi          28%
+gitops-demo-worker2         187m         2%       761Mi           19%
+
+# Pod resource usage across all namespaces
+$ kubectl top pods -A
+NAMESPACE      NAME                                CPU(cores)   MEMORY(bytes)
+argocd         argocd-server-7bfbb78876-rtwwd      4m           46Mi
+monitoring     prometheus-kube-prometheus-0        115m         454Mi
+demo-ghcr      ghcr-podinfo-ff47797dd-thmp5        10m          24Mi
+kube-system    metrics-server-56fb9549f4-vncbd     18m          34Mi
+```
+
 ### Events & Status
 
 | Command | Description | Usage |
@@ -97,6 +118,8 @@ done
 | | `kubectl get svc -n <ns>` | Service status |
 | High Resource | `kubectl top pods -n <ns>` | Resource usage |
 | | `kubectl describe nodes` | Node pressure |
+| Metrics API Error | `make metrics-status` | Check metrics-server |
+| | `kubectl get pods -n kube-system -l k8s-app=metrics-server` | Verify metrics pods |
 
 ## Namespace Operations
 
@@ -189,4 +212,7 @@ alias kgn='kubectl get nodes'
 alias kdp='kubectl describe pod'
 alias klog='kubectl logs'
 alias kexec='kubectl exec -it'
+alias ktop='kubectl top'
+alias ktopp='kubectl top pods'
+alias ktopn='kubectl top nodes'
 ```

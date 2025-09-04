@@ -1,6 +1,7 @@
 # K8s GitOps Demo - Optimized Makefile v3
 .PHONY: help quickstart quickstart-local quickstart-ghcr clean \
         cluster-create cluster-delete registry-setup registry-test \
+        metrics-install metrics-status \
         argocd-install argocd-config ingress-install ingress-config \
         build-local develop-local \
         release-ghcr check-sync-strict wait-for-actions sync-actions-changes release-status \
@@ -79,6 +80,8 @@ help: ## Show all available commands
 	@echo "  $(CYAN)cluster-delete$(RESET)     Delete cluster"
 	@echo "  $(CYAN)registry-setup$(RESET)     Setup local Docker registry"
 	@echo "  $(CYAN)registry-test$(RESET)      Test registry connectivity"
+	@echo "  $(CYAN)metrics-install$(RESET)    Install metrics-server for kubectl top"
+	@echo "  $(CYAN)metrics-status$(RESET)     Check metrics-server status"
 	@echo "  $(CYAN)argocd-install$(RESET)     Install ArgoCD"
 	@echo "  $(CYAN)argocd-config$(RESET)      Configure ArgoCD"
 	@echo "  $(CYAN)ingress-install$(RESET)    Install NGINX Ingress Controller"
@@ -106,6 +109,7 @@ help: ## Show all available commands
 	@echo "  • GHCR release:        $(CYAN)make release-ghcr MSG=\"feat: new feature\"$(RESET)"
 	@echo "  • Local development:   $(CYAN)make develop-local$(RESET)"
 	@echo "  • Initial app setup:   $(CYAN)make deploy-app-local$(RESET) (only needed once)"
+	@echo "  • Resource monitoring: $(CYAN)kubectl top nodes$(RESET) / $(CYAN)kubectl top pods$(RESET)"
 	@echo ""
 
 #=============================================================================
@@ -139,6 +143,7 @@ quickstart-local: ## Complete setup for local development with alerts
 	@echo "$(CYAN)🚀 Starting local development setup...$(RESET)"
 	@$(MAKE) cluster-create DRY_RUN=$(DRY_RUN)
 	@$(MAKE) registry-setup DRY_RUN=$(DRY_RUN)
+	@$(MAKE) metrics-install DRY_RUN=$(DRY_RUN)
 	@$(MAKE) argocd-install DRY_RUN=$(DRY_RUN)
 	@$(MAKE) argocd-config DRY_RUN=$(DRY_RUN)
 	@$(MAKE) ingress-install DRY_RUN=$(DRY_RUN)
@@ -160,6 +165,7 @@ quickstart-ghcr: ## Complete setup for GHCR deployment with alerts
 	fi
 	@echo "$(CYAN)☁️  Starting GHCR deployment setup...$(RESET)"
 	@$(MAKE) cluster-create SETUP_REGISTRY=false DRY_RUN=$(DRY_RUN)
+	@$(MAKE) metrics-install DRY_RUN=$(DRY_RUN)
 	@$(MAKE) argocd-install DRY_RUN=$(DRY_RUN)
 	@$(MAKE) argocd-config DRY_RUN=$(DRY_RUN)
 	@$(MAKE) ingress-install DRY_RUN=$(DRY_RUN)
@@ -237,6 +243,61 @@ argocd-config: ## Configure ArgoCD settings and secrets
 	$(call execute_cmd, kubectl apply -f gitops/argocd/argocd-secret.yaml)
 	$(call execute_cmd, kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge -p '{"data":{"server.insecure":"true"}}' || true)
 	@echo "$(GREEN)✅ ArgoCD configured!$(RESET)"
+
+#=============================================================================
+# METRICS SERVER COMPONENTS
+#=============================================================================
+metrics-install: ## Install metrics-server for kubectl top commands
+	@echo "$(CYAN)Installing metrics-server...$(RESET)"
+	$(call execute_cmd, kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml)
+	@if [ "$(DRY_RUN)" != "1" ]; then \
+		echo "$(CYAN)Patching metrics-server for kind cluster...$(RESET)"; \
+		kubectl patch deployment metrics-server -n kube-system --type='json' \
+			-p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]' || true; \
+		echo "$(CYAN)Waiting for metrics-server to be ready...$(RESET)"; \
+		kubectl wait --for=condition=available --timeout=120s deployment/metrics-server -n kube-system || \
+			{ echo "$(RED)❌ Metrics-server installation failed$(RESET)"; exit 1; }; \
+		echo "$(CYAN)Verifying metrics API...$(RESET)"; \
+		RETRY=0; MAX_RETRY=30; \
+		while [ $$RETRY -lt $$MAX_RETRY ]; do \
+			if kubectl get apiservices | grep -q "v1beta1.metrics.k8s.io.*True"; then \
+				break; \
+			fi; \
+			RETRY=$$((RETRY + 1)); \
+			if [ $$RETRY -eq $$MAX_RETRY ]; then \
+				echo "$(RED)❌ Metrics API not available$(RESET)"; \
+				exit 1; \
+			fi; \
+			sleep 2; \
+		done; \
+	fi
+	@echo "$(GREEN)✅ Metrics-server installed! kubectl top commands now available$(RESET)"
+
+metrics-status: ## Check metrics-server status and API availability
+	@echo "$(CYAN)📊 Metrics Server Status$(RESET)"
+	@echo "$(CYAN)========================$(RESET)"
+	@if kubectl get pods -n kube-system -l k8s-app=metrics-server &>/dev/null; then \
+		RUNNING=$$(kubectl get pods -n kube-system -l k8s-app=metrics-server --no-headers 2>/dev/null | grep -c Running || echo 0); \
+		TOTAL=$$(kubectl get pods -n kube-system -l k8s-app=metrics-server --no-headers 2>/dev/null | wc -l | xargs || echo 0); \
+		if [ "$$RUNNING" -gt 0 ]; then \
+			if [ "$$RUNNING" -eq "$$TOTAL" ]; then \
+				echo "$(GREEN)✅ Metrics-server running ($$RUNNING/$$TOTAL pods)$(RESET)"; \
+			else \
+				echo "$(YELLOW)⚠️  Metrics-server partially ready ($$RUNNING/$$TOTAL pods)$(RESET)"; \
+			fi; \
+		else \
+			echo "$(RED)❌ Metrics-server pods not ready$(RESET)"; \
+		fi; \
+	else \
+		echo "$(RED)❌ Metrics-server not installed$(RESET)"; \
+	fi
+	@if kubectl get apiservices | grep -q "v1beta1.metrics.k8s.io.*True"; then \
+		echo "$(GREEN)✅ Metrics API available$(RESET)"; \
+		echo "$(CYAN)Testing kubectl top commands:$(RESET)"; \
+		kubectl top nodes --no-headers 2>/dev/null | head -3 | while read line; do echo "  $$line"; done || echo "$(YELLOW)⚠️  kubectl top may still be starting$(RESET)"; \
+	else \
+		echo "$(RED)❌ Metrics API not available$(RESET)"; \
+	fi
 
 #=============================================================================
 # INGRESS COMPONENTS
@@ -553,6 +614,21 @@ status: ## Check system status and health
 	else \
 		echo "$(YELLOW)⚠️  Monitoring not installed$(RESET)"; \
 	fi
+	@if kubectl get pods -n kube-system -l k8s-app=metrics-server &>/dev/null; then \
+		RUNNING=$$(kubectl get pods -n kube-system -l k8s-app=metrics-server --no-headers 2>/dev/null | grep -c Running || echo 0); \
+		TOTAL=$$(kubectl get pods -n kube-system -l k8s-app=metrics-server --no-headers 2>/dev/null | wc -l | xargs || echo 0); \
+		if [ "$$RUNNING" -gt 0 ]; then \
+			if [ "$$RUNNING" -eq "$$TOTAL" ]; then \
+				echo "$(GREEN)✅ Metrics-server running ($$RUNNING/$$TOTAL pods)$(RESET)"; \
+			else \
+				echo "$(YELLOW)⚠️  Metrics-server partially ready ($$RUNNING/$$TOTAL pods)$(RESET)"; \
+			fi; \
+		else \
+			echo "$(RED)❌ Metrics-server pods not ready$(RESET)"; \
+		fi; \
+	else \
+		echo "$(YELLOW)⚠️  Metrics-server not installed$(RESET)"; \
+	fi
 	@echo ""
 	@echo "$(CYAN)Applications:$(RESET)"
 	@kubectl get applications -n argocd 2>/dev/null | tail -n +2 | while read app rest; do \
@@ -562,6 +638,11 @@ status: ## Check system status and health
 	@echo "$(CYAN)Service Health:$(RESET)"
 	@curl -sf -o /dev/null http://argocd.local/api/version 2>/dev/null && \
 		echo "$(GREEN)✅ ArgoCD API healthy$(RESET)" || echo "$(YELLOW)⚠️  ArgoCD not accessible (check /etc/hosts)$(RESET)"
+	@if kubectl get apiservices | grep -q "v1beta1.metrics.k8s.io.*True" 2>/dev/null; then \
+		echo "$(GREEN)✅ Metrics API available$(RESET)"; \
+	else \
+		echo "$(YELLOW)⚠️  Metrics API not available$(RESET)"; \
+	fi
 	@if [ "$(DETAILED)" = "1" ]; then \
 		echo ""; \
 		echo "$(CYAN)Detailed Pod Status:$(RESET)"; \
