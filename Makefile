@@ -10,8 +10,7 @@
         test-all test-crash-loop test-node-failure test-pod-not-ready test-alert-instant test-load-pressure \
         test-cleanup-all test-crash-loop-cleanup test-node-failure-cleanup test-pod-not-ready-cleanup \
         test-alert-cleanup test-load-pressure-cleanup test-env-check \
-        test-alert-fast-deploy test-alert-fast-cleanup test-alert-fast-status \
-        status access logs check-git-status pause-services resume-services
+         status access logs check-git-status pause-services resume-services
 
 #=============================================================================
 # VARIABLES & SETTINGS
@@ -107,8 +106,6 @@ help: ## Show all available commands
 	@echo "  $(CYAN)test-pod-not-ready$(RESET) Test pod readiness probe failures"
 	@echo "  $(CYAN)test-alert-instant$(RESET) Test instant alert routing to Discord"
 	@echo "  $(CYAN)test-load-pressure$(RESET) Test resource pressure and throttling"
-	@echo "  $(CYAN)test-alert-fast-deploy$(RESET) Deploy fast test alerts (1-2 min firing)"
-	@echo "  $(CYAN)test-alert-fast-status$(RESET) Check fast alert deployment status"
 	@echo "  $(CYAN)test-cleanup-all$(RESET)   Clean up all test resources"
 	@echo ""
 	@echo "$(GREEN)📋 Operations$(RESET)"
@@ -752,49 +749,6 @@ test-alert-cleanup: ## Clean up alert routing test
 	@$(call execute_cmd,kubectl delete configmap instant-alert-test-instructions -n monitoring --ignore-not-found=true)
 	@echo "$(GREEN)✅ Alert routing test cleanup completed$(RESET)"
 
-test-alert-fast-deploy: ## Deploy fast test alerts (fires in 1-2 min instead of 15-20 min)
-	@echo "$(CYAN)🚀 Deploying fast test alerts...$(RESET)"
-	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
-	@echo "$(YELLOW)⚠️  These alerts are for TESTING ONLY - not for production!$(RESET)"
-	@echo "$(YELLOW)📋 Fast alerts will fire in 1-2 minutes instead of 15-20 minutes$(RESET)"
-	@echo ""
-	
-	# Deploy fast test alerts
-	@$(call execute_cmd,kubectl apply -f monitoring/alertmanager/test-alerts-fast.yaml)
-	
-	@echo "$(GREEN)✅ Fast test alerts deployed$(RESET)"
-	@echo "$(CYAN)Alert timing:$(RESET)"
-	@echo "  • TestPodCrashLoopingFast: ~1-2 minutes (vs 15-20 min)"
-	@echo "  • TestPodNotReadyFast: ~2-3 minutes (vs 15-20 min)"
-	@echo "  • TestNodeNotReadyFast: ~2-3 minutes (vs 15-20 min)"
-	@echo "  • TestCPUThrottlingHighFast: ~1-2 minutes (vs 5-10 min)"
-	@echo ""
-	@echo "$(CYAN)Monitor alerts at:$(RESET)"
-	@echo "  • Prometheus: http://localhost:30090/alerts"
-	@echo "  • AlertManager: http://localhost:30093"
-	@echo ""
-	@echo "$(YELLOW)🧹 Remember to clean up: make test-alert-fast-cleanup$(RESET)"
-
-test-alert-fast-cleanup: ## Remove fast test alerts
-	@echo "$(CYAN)🧹 Removing fast test alerts...$(RESET)"
-	@$(call execute_cmd,kubectl delete prometheusrule test-alerts-fast -n monitoring --ignore-not-found=true)
-	@$(call execute_cmd,kubectl delete configmap test-alerts-fast-instructions -n monitoring --ignore-not-found=true)
-	@echo "$(GREEN)✅ Fast test alerts removed$(RESET)"
-
-test-alert-fast-status: ## Check if fast test alerts are deployed
-	@echo "$(CYAN)📊 Checking fast test alert status...$(RESET)"
-	@if kubectl get prometheusrule test-alerts-fast -n monitoring >/dev/null 2>&1; then \
-		echo "$(GREEN)✅ Fast test alerts are deployed$(RESET)"; \
-		echo ""; \
-		echo "$(CYAN)Active fast test alerts:$(RESET)"; \
-		kubectl get prometheusrule test-alerts-fast -n monitoring -o jsonpath='{range .spec.groups[*].rules[*]}- {.alert}{"\n"}{end}'; \
-		echo ""; \
-		echo "$(CYAN)Current alert states:$(RESET)"; \
-		curl -s http://localhost:30090/api/v1/alerts 2>/dev/null | jq -r '.data.alerts[] | select(.labels.test_type=="fast") | "  • \(.labels.alertname): \(.state)"' || echo "  (Prometheus not accessible on port 30090)"; \
-	else \
-		echo "$(YELLOW)⚠️  Fast test alerts are NOT deployed$(RESET)"; \
-		echo "$(CYAN)Deploy them with: make test-alert-fast-deploy$(RESET)"; \
-	fi
 
 test-load-pressure: ## Test resource pressure and CPU throttling alerts
 	@echo "$(CYAN)🚀 Testing Resource Pressure & Load...$(RESET)"
@@ -855,7 +809,6 @@ test-cleanup-all: ## Clean up all test resources
 	@$(MAKE) test-node-failure-cleanup  
 	@$(MAKE) test-pod-not-ready-cleanup
 	@$(MAKE) test-alert-cleanup
-	@$(MAKE) test-alert-fast-cleanup
 	@$(MAKE) test-load-pressure-cleanup
 	@echo "$(GREEN)✅ All monitoring tests cleaned up$(RESET)"
 

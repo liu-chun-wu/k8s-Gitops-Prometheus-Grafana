@@ -21,7 +21,6 @@ k6 version --quiet 2>/dev/null && echo "✅ k6 installed" || echo "❌ k6 not fo
 - **✅ Heredoc YAML Issue Fixed**: Test files now use separate YAML files instead of inline heredocs
 - **✅ Make Commands Work**: All `make test-*` commands now work properly 
 - **✅ Better Error Handling**: Tests include prerequisite checks and clear error messages
-- **✅ Fast Test Alerts**: Optional fast alerts that fire in 1-2 minutes instead of 15-20 minutes
 
 ### Environment Validation
 ```bash
@@ -51,33 +50,6 @@ make access  # Shows all URLs and credentials
 
 > Each test includes: **Dashboard locations**, **Expected alerts**, **Commands**, **Success criteria**, **Cleanup**
 
-## 🚀 **Fast Test Alerts (Optional)**
-
-Speed up your testing with fast alerts that fire in minutes instead of 15-20 minutes!
-
-### Deploy Fast Alerts
-```bash
-# Deploy fast test alerts before running tests
-make test-alert-fast-deploy
-
-# Check status
-make test-alert-fast-status
-
-# Clean up when done
-make test-alert-fast-cleanup
-```
-
-### Alert Timing Comparison
-| Alert | Production | Standard Test | **Fast Test** |
-|-------|------------|---------------|---------------|
-| PodCrashLooping | 15-20 min | 15-20 min | **1-2 min** ✨ |
-| PodNotReady | 15-20 min | 15-20 min | **2-3 min** ✨ |
-| NodeNotReady | 15-20 min | 15-20 min | **2-3 min** ✨ |
-| CPUThrottling | 5-10 min | 5-10 min | **1-2 min** ✨ |
-
-⚠️ **Note**: Fast alerts are for testing only - do not use in production!
-
----
 
 ## 1. Pod CrashLoopBackOff Test 💥
 
@@ -87,8 +59,7 @@ make test-alert-fast-cleanup
 - **Alerts**: http://localhost:30093 (AlertManager)
 
 ### ⚠️ **Expected Alerts**: 
-- **Standard**: `KubePodCrashLooping` (15-20 min)
-- **Fast Test**: `TestPodCrashLoopingFast` (1-2 min) 🚀
+- `KubePodCrashLooping` (fires after ~15-20 minutes)
 
 ### 🔧 **Execute Test**
 ```bash
@@ -122,7 +93,7 @@ kubectl get pod crash-demo -w
 ### ✅ **Success Criteria**
 - Pod shows increasing restart count
 - Pod status shows `CrashLoopBackOff`
-- AlertManager fires `KubePodCrashLooping` alert within ~5 minutes
+- AlertManager fires `KubePodCrashLooping` alert after ~15-20 minutes
 - Discord notification received (if configured)
 
 ### 🧹 **Cleanup**
