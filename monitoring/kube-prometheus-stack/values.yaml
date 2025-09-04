@@ -71,15 +71,18 @@ grafana:
   # 這些條目會被轉成 ConfigMap，並由 sidecar 送入上面的 providers 路徑
   dashboards:
     kubernetes:
-      # 使用 2024-2025 年最新的 dashboards，確保不含 Angular
-      k8s-node-metrics-2025:
-        gnetId: 22413  # K8s Node Metrics Multi Clusters - Grafana 11 (2025)
+      # 精選的 dashboards 配置
+      k8s-api-server:
+        gnetId: 15761  # Kubernetes / System / API Server
         datasource: Prometheus
-      k8s-cluster-overview:
-        gnetId: 13702  # Node Exporter Resources Overview
+      dashboard-21012:
+        gnetId: 21012  # Dashboard ID 21012
         datasource: Prometheus
-      prometheus-k8s-addon:
-        gnetId: 19105  # Prometheus monitoring - React-based
+      dashboard-21016:
+        gnetId: 21016  # Dashboard ID 21016
+        datasource: Prometheus
+      node-exporter-full:
+        gnetId: 1860  # Node Exporter Full - 經典的系統監控 dashboard
         datasource: Prometheus
 
   sidecar:

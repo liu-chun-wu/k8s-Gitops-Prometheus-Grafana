@@ -1,0 +1,260 @@
+# Enhanced Makefile targets for complete setup
+# This file contains enhanced versions of quickstart-ghcr and resume-services
+# that include all added features like Discord alerting
+
+#=============================================================================
+# ENHANCED QUICKSTART COMMANDS
+#=============================================================================
+
+quickstart-ghcr-complete: ## Complete setup for GHCR deployment with all features
+	@echo "$(CYAN)☁️  Starting COMPLETE GHCR deployment setup...$(RESET)"
+	@echo "$(CYAN)This includes Discord alerting and all monitoring features$(RESET)"
+	@echo ""
+	# Core infrastructure
+	@$(MAKE) cluster-create SETUP_REGISTRY=false DRY_RUN=$(DRY_RUN)
+	@$(MAKE) argocd-install DRY_RUN=$(DRY_RUN)
+	@$(MAKE) argocd-config DRY_RUN=$(DRY_RUN)
+	@$(MAKE) ingress-install DRY_RUN=$(DRY_RUN)
+	@$(MAKE) ingress-config DRY_RUN=$(DRY_RUN)
+	# Applications
+	@$(MAKE) deploy-app-ghcr DRY_RUN=$(DRY_RUN)
+	# Monitoring stack
+	@$(MAKE) deploy-monitoring DRY_RUN=$(DRY_RUN)
+	# Wait for monitoring to be ready before installing alerts
+	@if [ "$(DRY_RUN)" != "1" ]; then \
+		echo "$(CYAN)⏳ Waiting for monitoring stack to be ready...$(RESET)"; \
+		kubectl wait --for=condition=available --timeout=180s \
+			deployment/kube-prometheus-stack-grafana -n monitoring 2>/dev/null || true; \
+		kubectl wait --for=condition=ready --timeout=180s \
+			statefulset/alertmanager-kube-prometheus-stack-alertmanager -n monitoring 2>/dev/null || true; \
+		kubectl wait --for=condition=ready --timeout=180s \
+			statefulset/prometheus-kube-prometheus-stack-prometheus -n monitoring 2>/dev/null || true; \
+		sleep 5; \
+	fi
+	# Discord alerting system
+	@if [ -f .env ]; then \
+		echo "$(CYAN)🔔 Installing Discord alerting system...$(RESET)"; \
+		$(MAKE) alert-install DRY_RUN=$(DRY_RUN) || \
+			echo "$(YELLOW)⚠️  Alert installation failed, but continuing...$(RESET)"; \
+	else \
+		echo "$(YELLOW)⚠️  .env file not found - skipping Discord alerting$(RESET)"; \
+		echo "$(YELLOW)   To enable Discord alerts: cp .env.example .env$(RESET)"; \
+		echo "$(YELLOW)   Then run: make alert-install$(RESET)"; \
+	fi
+	# Status and access info
+	@if [ "$(DRY_RUN)" != "1" ]; then sleep 3; fi
+	@$(MAKE) status-complete
+	@echo ""
+	@echo "$(GREEN)✅ COMPLETE GHCR deployment environment ready!$(RESET)"
+	@$(MAKE) access-complete
+
+#=============================================================================
+# ENHANCED RESUME COMMANDS
+#=============================================================================
+
+resume-services-complete: ## Resume all services including Discord alerting with health checks
+	@echo "$(CYAN)▶️  Resuming ALL services (including Discord alerting)...$(RESET)"
+	# Resume ArgoCD
+	$(call execute_cmd, kubectl scale deployment -n argocd --replicas=1 --all 2>/dev/null || true)
+	$(call execute_cmd, kubectl scale statefulset -n argocd --replicas=1 --all 2>/dev/null || true)
+	# Resume Monitoring (including Discord alerting)
+	$(call execute_cmd, kubectl scale deployment -n monitoring --replicas=1 --all 2>/dev/null || true)
+	$(call execute_cmd, kubectl scale statefulset -n monitoring --replicas=1 --all 2>/dev/null || true)
+	# Specifically ensure Discord alerting is resumed
+	$(call execute_cmd, kubectl scale deployment alertmanager-discord -n monitoring --replicas=1 2>/dev/null || true)
+	# Resume Demo Applications
+	$(call execute_cmd, kubectl scale deployment ghcr-podinfo -n demo-ghcr --replicas=2 2>/dev/null || true)
+	$(call execute_cmd, kubectl scale deployment local-podinfo -n demo-local --replicas=2 2>/dev/null || true)
+	# Resume Ingress Controller
+	$(call execute_cmd, kubectl scale deployment ingress-nginx-controller -n ingress-nginx --replicas=1 2>/dev/null || true)
+	@echo ""
+	@echo "$(CYAN)⏳ Waiting for services to be ready...$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	# Wait for ArgoCD
+	@echo "$(CYAN)Checking ArgoCD...$(RESET)"
+	@kubectl wait --for=condition=available --timeout=120s \
+		deployment/argocd-server -n argocd 2>/dev/null && \
+		echo "$(GREEN)  ✓ ArgoCD server ready$(RESET)" || \
+		echo "$(YELLOW)  ⚠️  ArgoCD server timeout (may still be starting)$(RESET)"
+	@kubectl wait --for=condition=ready --timeout=60s \
+		statefulset/argocd-application-controller -n argocd 2>/dev/null && \
+		echo "$(GREEN)  ✓ ArgoCD application controller ready$(RESET)" || \
+		echo "$(YELLOW)  ⚠️  ArgoCD controller timeout$(RESET)"
+	# Wait for Ingress Controller
+	@echo "$(CYAN)Checking Ingress Controller...$(RESET)"
+	@kubectl wait --for=condition=ready pod \
+		-l app.kubernetes.io/component=controller \
+		-n ingress-nginx --timeout=60s 2>/dev/null && \
+		echo "$(GREEN)  ✓ Ingress controller ready$(RESET)" || \
+		echo "$(YELLOW)  ⚠️  Ingress controller timeout$(RESET)"
+	# Wait for Monitoring Stack
+	@echo "$(CYAN)Checking Monitoring Stack...$(RESET)"
+	@if kubectl get deployment kube-prometheus-stack-grafana -n monitoring &>/dev/null; then \
+		kubectl wait --for=condition=available --timeout=120s \
+			deployment/kube-prometheus-stack-grafana -n monitoring 2>/dev/null && \
+			echo "$(GREEN)  ✓ Grafana ready$(RESET)" || \
+			echo "$(YELLOW)  ⚠️  Grafana timeout$(RESET)"; \
+		kubectl wait --for=condition=ready --timeout=120s \
+			statefulset/prometheus-kube-prometheus-stack-prometheus -n monitoring 2>/dev/null && \
+			echo "$(GREEN)  ✓ Prometheus ready$(RESET)" || \
+			echo "$(YELLOW)  ⚠️  Prometheus timeout$(RESET)"; \
+		kubectl wait --for=condition=ready --timeout=120s \
+			statefulset/alertmanager-kube-prometheus-stack-alertmanager -n monitoring 2>/dev/null && \
+			echo "$(GREEN)  ✓ AlertManager ready$(RESET)" || \
+			echo "$(YELLOW)  ⚠️  AlertManager timeout$(RESET)"; \
+	fi
+	# Wait for Discord Alerting
+	@echo "$(CYAN)Checking Discord Alerting...$(RESET)"
+	@if kubectl get deployment alertmanager-discord -n monitoring &>/dev/null; then \
+		kubectl wait --for=condition=available --timeout=60s \
+			deployment/alertmanager-discord -n monitoring 2>/dev/null && \
+			echo "$(GREEN)  ✓ Discord alerting ready$(RESET)" || \
+			echo "$(YELLOW)  ⚠️  Discord alerting timeout$(RESET)"; \
+	else \
+		echo "$(YELLOW)  ⚠️  Discord alerting not installed$(RESET)"; \
+	fi
+	# Wait for Applications
+	@echo "$(CYAN)Checking Applications...$(RESET)"
+	@if kubectl get deployment ghcr-podinfo -n demo-ghcr &>/dev/null; then \
+		kubectl wait --for=condition=available --timeout=60s \
+			deployment/ghcr-podinfo -n demo-ghcr 2>/dev/null && \
+			echo "$(GREEN)  ✓ GHCR Podinfo ready$(RESET)" || \
+			echo "$(YELLOW)  ⚠️  GHCR Podinfo timeout$(RESET)"; \
+	fi
+	@if kubectl get deployment local-podinfo -n demo-local &>/dev/null; then \
+		kubectl wait --for=condition=available --timeout=60s \
+			deployment/local-podinfo -n demo-local 2>/dev/null && \
+			echo "$(GREEN)  ✓ Local Podinfo ready$(RESET)" || \
+			echo "$(YELLOW)  ⚠️  Local Podinfo timeout$(RESET)"; \
+	fi
+	@echo ""
+	@echo "$(GREEN)✅ All services resumed successfully!$(RESET)"
+	@echo ""
+	@$(MAKE) status-complete
+
+#=============================================================================
+# ENHANCED STATUS COMMANDS
+#=============================================================================
+
+status-complete: ## Complete status check including Discord alerting
+	@echo "$(CYAN)📊 Complete Cluster Status$(RESET)"
+	@echo "$(CYAN)=========================$(RESET)"
+	@echo ""
+	# ArgoCD Status
+	@echo "$(CYAN)ArgoCD:$(RESET)"
+	@kubectl get pods -n argocd 2>/dev/null | grep -E "^(NAME|argocd)" | while read line; do \
+		if echo "$$line" | grep -q "NAME"; then \
+			echo "$$line"; \
+		else \
+			name=$$(echo "$$line" | awk '{print $$1}'); \
+			status=$$(echo "$$line" | awk '{print $$3}'); \
+			if [ "$$status" = "Running" ]; then \
+				echo "$(GREEN)✅ $$line$(RESET)"; \
+			else \
+				echo "$(YELLOW)⚠️  $$line$(RESET)"; \
+			fi; \
+		fi; \
+	done || echo "$(YELLOW)⚠️  ArgoCD not installed$(RESET)"
+	@echo ""
+	# Monitoring Status
+	@echo "$(CYAN)Monitoring Stack:$(RESET)"
+	@if kubectl get namespace monitoring &>/dev/null; then \
+		pods=$$(kubectl get pods -n monitoring 2>/dev/null | tail -n +2 | wc -l); \
+		if [ $$pods -gt 0 ]; then \
+			echo "  Grafana:         $$(kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana --no-headers 2>/dev/null | awk '{print $$3}' | head -1 || echo 'Not found')"; \
+			echo "  Prometheus:      $$(kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus --no-headers 2>/dev/null | awk '{print $$3}' | head -1 || echo 'Not found')"; \
+			echo "  AlertManager:    $$(kubectl get pods -n monitoring -l app.kubernetes.io/name=alertmanager --no-headers 2>/dev/null | awk '{print $$3}' | head -1 || echo 'Not found')"; \
+			echo "  Node Exporters:  $$(kubectl get pods -n monitoring -l app.kubernetes.io/name=prometheus-node-exporter --no-headers 2>/dev/null | grep Running | wc -l)/3"; \
+			# Discord Alerting Status
+			discord_status=$$(kubectl get pods -n monitoring -l app=alertmanager-discord --no-headers 2>/dev/null | awk '{print $$3}' | head -1); \
+			if [ -n "$$discord_status" ]; then \
+				if [ "$$discord_status" = "Running" ]; then \
+					echo "  Discord Alert:   $(GREEN)✅ Running$(RESET)"; \
+				else \
+					echo "  Discord Alert:   $(YELLOW)⚠️  $$discord_status$(RESET)"; \
+				fi; \
+			else \
+				echo "  Discord Alert:   $(YELLOW)⚠️  Not installed$(RESET)"; \
+			fi; \
+		else \
+			echo "$(YELLOW)⚠️  Monitoring namespace exists but no pods$(RESET)"; \
+		fi; \
+	else \
+		echo "$(YELLOW)⚠️  Monitoring not installed$(RESET)"; \
+	fi
+	@echo ""
+	# Applications Status
+	@echo "$(CYAN)Applications:$(RESET)"
+	@kubectl get applications -n argocd 2>/dev/null | tail -n +2 | while read app rest; do \
+		echo "  • $$app"; \
+	done || echo "$(YELLOW)No applications deployed$(RESET)"
+	@echo ""
+	# Service Health
+	@echo "$(CYAN)Service Health:$(RESET)"
+	@curl -sf -o /dev/null http://argocd.local/api/version 2>/dev/null && \
+		echo "$(GREEN)✅ ArgoCD API healthy$(RESET)" || echo "$(YELLOW)⚠️  ArgoCD not accessible (check /etc/hosts)$(RESET)"
+	# Alert Rules Status
+	@if kubectl get prometheusrule -n monitoring &>/dev/null 2>&1; then \
+		rule_count=$$(kubectl get prometheusrule -n monitoring --no-headers 2>/dev/null | wc -l); \
+		if [ $$rule_count -gt 0 ]; then \
+			echo "$(GREEN)✅ Prometheus alert rules configured ($$rule_count rulesets)$(RESET)"; \
+		else \
+			echo "$(YELLOW)⚠️  No Prometheus alert rules found$(RESET)"; \
+		fi; \
+	fi
+	@echo ""
+
+access-complete: ## Show all access URLs including Discord webhook status
+	@echo "$(CYAN)🌐 Complete Service Access Information$(RESET)"
+	@echo "$(CYAN)======================================$(RESET)"
+	@echo ""
+	@echo "$(GREEN)Service URLs:$(RESET)"
+	@echo "  ArgoCD:       http://argocd.local"
+	@echo "  Prometheus:   http://localhost:30090"
+	@echo "  Grafana:      http://localhost:30301"
+	@echo "  AlertManager: http://localhost:30093"
+	@echo ""
+	@echo "$(GREEN)Credentials:$(RESET)"
+	@echo "  ArgoCD:     admin / $(ARGOCD_PASSWORD)"
+	@echo "  Grafana:    admin / $(GRAFANA_PASSWORD)"
+	@echo ""
+	@echo "$(GREEN)Discord Alerting:$(RESET)"
+	@if kubectl get secret discord-webhook -n monitoring &>/dev/null 2>&1; then \
+		echo "  Status: $(GREEN)✅ Configured$(RESET)"; \
+		echo "  Test:   make test-alert-instant"; \
+	else \
+		echo "  Status: $(YELLOW)⚠️  Not configured$(RESET)"; \
+		echo "  Setup:  cp .env.example .env && make alert-install"; \
+	fi
+	@echo ""
+	@echo "$(YELLOW)📌 Note: Ensure /etc/hosts contains: 127.0.0.1 argocd.local$(RESET)"
+
+#=============================================================================
+# MIGRATION HELPERS
+#=============================================================================
+
+migrate-to-complete: ## Migrate existing setup to complete version with all features
+	@echo "$(CYAN)🔄 Migrating to complete setup...$(RESET)"
+	@if [ ! -f .env ]; then \
+		echo "$(YELLOW)Creating .env file from template...$(RESET)"; \
+		cp .env.example .env; \
+		echo "$(YELLOW)⚠️  Please edit .env with your Discord webhook URL$(RESET)"; \
+		echo "$(YELLOW)   Then run this command again$(RESET)"; \
+		exit 1; \
+	fi
+	# Install missing components
+	@if ! kubectl get deployment alertmanager-discord -n monitoring &>/dev/null 2>&1; then \
+		echo "$(CYAN)Installing Discord alerting...$(RESET)"; \
+		$(MAKE) alert-install; \
+	else \
+		echo "$(GREEN)✅ Discord alerting already installed$(RESET)"; \
+	fi
+	# Apply any missing configurations
+	@echo "$(CYAN)Applying latest configurations...$(RESET)"
+	@kubectl apply -f monitoring/alertmanager/prometheus-rules.yaml 2>/dev/null || true
+	@echo ""
+	@echo "$(GREEN)✅ Migration complete!$(RESET)"
+	@$(MAKE) status-complete
+
+# Include this file in the main Makefile with:
+# include Makefile.enhanced
