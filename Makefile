@@ -7,6 +7,10 @@
         release-ghcr check-sync-strict wait-for-actions sync-actions-changes release-status \
         deploy-app-local deploy-app-ghcr deploy-monitoring \
         alert-install alert-uninstall alert-update-webhook alert-status \
+        test-all test-crash-loop test-node-failure test-pod-not-ready test-alert-instant test-load-pressure \
+        test-cleanup-all test-crash-loop-cleanup test-node-failure-cleanup test-pod-not-ready-cleanup \
+        test-alert-cleanup test-load-pressure-cleanup test-env-check \
+        test-alert-fast-deploy test-alert-fast-cleanup test-alert-fast-status \
         status access logs check-git-status pause-services resume-services
 
 #=============================================================================
@@ -93,6 +97,19 @@ help: ## Show all available commands
 	@echo "  $(CYAN)alert-uninstall$(RESET)    Remove alerting system"
 	@echo "  $(CYAN)alert-update-webhook$(RESET) Update Discord webhook URL"
 	@echo "  $(CYAN)alert-status$(RESET)       Check alerting system status"
+	@echo ""
+	@echo "$(GREEN)🧪 Monitoring Tests$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "  $(CYAN)test-all$(RESET)           Run complete monitoring test suite"
+	@echo "  $(CYAN)test-env-check$(RESET)     Validate test environment prerequisites"
+	@echo "  $(CYAN)test-crash-loop$(RESET)    Test pod crash loop detection & alerts"
+	@echo "  $(CYAN)test-node-failure$(RESET)  Test node failure scenarios"
+	@echo "  $(CYAN)test-pod-not-ready$(RESET) Test pod readiness probe failures"
+	@echo "  $(CYAN)test-alert-instant$(RESET) Test instant alert routing to Discord"
+	@echo "  $(CYAN)test-load-pressure$(RESET) Test resource pressure and throttling"
+	@echo "  $(CYAN)test-alert-fast-deploy$(RESET) Deploy fast test alerts (1-2 min firing)"
+	@echo "  $(CYAN)test-alert-fast-status$(RESET) Check fast alert deployment status"
+	@echo "  $(CYAN)test-cleanup-all$(RESET)   Clean up all test resources"
 	@echo ""
 	@echo "$(GREEN)📋 Operations$(RESET)"
 	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
@@ -557,6 +574,343 @@ alert-status: ## Check alerting system status
 
 
 #=============================================================================
+# MONITORING TESTS
+#=============================================================================
+
+test-env-check: ## Validate test environment prerequisites
+	@echo "$(CYAN)🔍 Validating test environment...$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	
+	# Check if monitoring stack is running
+	@if kubectl get pods -n monitoring >/dev/null 2>&1; then \
+		MONITORING_PODS=$$(kubectl get pods -n monitoring --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l | xargs); \
+		echo "$(GREEN)  ✅ Monitoring stack: $$MONITORING_PODS pods running$(RESET)"; \
+	else \
+		echo "$(RED)  ❌ Monitoring stack not found. Run 'make deploy-monitoring' first$(RESET)"; \
+		exit 1; \
+	fi
+	
+	# Check load testing tools
+	@echo "$(CYAN)Checking load testing tools...$(RESET)"
+	@if command -v hey >/dev/null 2>&1; then \
+		echo "$(GREEN)  ✅ hey: $$(hey --version 2>&1 | head -n1)$(RESET)"; \
+	else \
+		echo "$(YELLOW)  ⚠️  hey not found. Install with: brew install hey$(RESET)"; \
+	fi
+	@if command -v k6 >/dev/null 2>&1; then \
+		echo "$(GREEN)  ✅ k6: $$(k6 version --quiet 2>&1)$(RESET)"; \
+	else \
+		echo "$(YELLOW)  ⚠️  k6 not found. Install with: brew install k6$(RESET)"; \
+	fi
+	
+	# Check demo-ghcr namespace (for testing)
+	@if kubectl get namespace demo-ghcr >/dev/null 2>&1; then \
+		DEMO_PODS=$$(kubectl get pods -n demo-ghcr --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l | xargs); \
+		echo "$(GREEN)  ✅ demo-ghcr namespace: $$DEMO_PODS pods running$(RESET)"; \
+	else \
+		echo "$(YELLOW)  ⚠️  demo-ghcr namespace not found$(RESET)"; \
+		echo "$(YELLOW)      Run 'make deploy-app-ghcr' to deploy GHCR application for testing$(RESET)"; \
+	fi
+	
+	# Check dashboard access
+	@echo "$(CYAN)Testing dashboard access...$(RESET)"
+	@GRAFANA_STATUS=$$(curl -s -o /dev/null -w "%{http_code}" http://localhost:30301/api/health 2>/dev/null || echo "000"); \
+	if [ "$$GRAFANA_STATUS" = "200" ]; then \
+		echo "$(GREEN)  ✅ Grafana: http://localhost:30301 (admin/admin123)$(RESET)"; \
+	else \
+		echo "$(YELLOW)  ⚠️  Grafana not accessible on port 30301$(RESET)"; \
+	fi
+	@echo "$(GREEN)✅ Environment check completed$(RESET)"
+
+test-crash-loop: ## Test pod crash loop detection and alerting
+	@echo "$(CYAN)💥 Testing Pod CrashLoopBackOff detection...$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(YELLOW)📋 This test creates a pod that crashes repeatedly$(RESET)"
+	@echo "$(YELLOW)📊 Monitor in Grafana: Kubernetes / Pods$(RESET)"
+	@echo "$(YELLOW)🔔 Expected alert: KubePodCrashLooping (after ~5min)$(RESET)"
+	@echo ""
+	
+	# Create crashing pod
+	@$(call execute_cmd,kubectl apply -f monitoring/test-resources/crash-loop-test.yaml)
+	
+	@echo "$(GREEN)✅ Crash test pod deployed$(RESET)"
+	@echo "$(CYAN)📊 Monitor progress:$(RESET)"
+	@echo "  • Pod status: kubectl get pod crash-demo -w"
+	@echo "  • Grafana: http://localhost:30301 → Kubernetes / Pods"
+	@echo "  • AlertManager: http://localhost:30093"
+	@echo ""
+	@echo "$(YELLOW)⏱️  Wait ~5 minutes for KubePodCrashLooping alert$(RESET)"
+	@echo "$(CYAN)🧹 Cleanup: make test-crash-loop-cleanup$(RESET)"
+
+test-crash-loop-cleanup: ## Clean up crash loop test resources
+	@echo "$(CYAN)🧹 Cleaning up crash loop test...$(RESET)"
+	@$(call execute_cmd,kubectl delete pod crash-demo --ignore-not-found=true)
+	@echo "$(GREEN)✅ Crash loop test cleanup completed$(RESET)"
+
+test-node-failure: ## Test node failure detection and pod rescheduling
+	@echo "$(CYAN)🖥️  Testing Node NotReady scenario...$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(YELLOW)📋 This test simulates worker node failure$(RESET)"
+	@echo "$(YELLOW)📊 Monitor in Grafana: Node Exporter / Nodes$(RESET)"
+	@echo "$(YELLOW)🔔 Expected alert: KubeNodeNotReady (after ~15min)$(RESET)"
+	@echo ""
+	
+	# Find and stop a worker node
+	@WORKER_CONTAINER=$$(docker ps --filter "name=$(CLUSTER_NAME)-worker" --format "{{.Names}}" | head -n1); \
+	if [ -z "$$WORKER_CONTAINER" ]; then \
+		echo "$(RED)❌ No worker nodes found in kind cluster$(RESET)"; \
+		exit 1; \
+	fi; \
+	echo "$(CYAN)Stopping worker node: $$WORKER_CONTAINER$(RESET)"; \
+	$(call execute_cmd,docker stop $$WORKER_CONTAINER); \
+	echo "STOPPED_NODE=$$WORKER_CONTAINER" > /tmp/test-node-failure.env
+	
+	@echo "$(GREEN)✅ Worker node stopped$(RESET)"
+	@echo "$(CYAN)📊 Monitor progress:$(RESET)"
+	@echo "  • Node status: kubectl get nodes -w"
+	@echo "  • Grafana: http://localhost:30301 → Node Exporter / Nodes"
+	@echo "  • Pod rescheduling: kubectl get pods --all-namespaces -o wide"
+	@echo ""
+	@echo "$(YELLOW)⏱️  Wait ~15 minutes for KubeNodeNotReady alert$(RESET)"
+	@echo "$(CYAN)🧹 Cleanup: make test-node-failure-cleanup$(RESET)"
+
+test-node-failure-cleanup: ## Clean up node failure test
+	@echo "$(CYAN)🧹 Restarting stopped worker node...$(RESET)"
+	@if [ -f /tmp/test-node-failure.env ]; then \
+		. /tmp/test-node-failure.env; \
+		if [ -n "$$STOPPED_NODE" ]; then \
+			echo "$(CYAN)Restarting node: $$STOPPED_NODE$(RESET)"; \
+			$(call execute_cmd,docker start $$STOPPED_NODE); \
+			echo "$(YELLOW)⏱️  Waiting for node to become Ready...$(RESET)"; \
+			sleep 10; \
+			$(call execute_cmd,kubectl wait --for=condition=Ready node/$$STOPPED_NODE --timeout=120s); \
+		fi; \
+		rm -f /tmp/test-node-failure.env; \
+	else \
+		echo "$(YELLOW)⚠️  No node failure state found$(RESET)"; \
+	fi
+	@echo "$(GREEN)✅ Node failure test cleanup completed$(RESET)"
+
+test-pod-not-ready: ## Test pod readiness probe failure detection
+	@echo "$(CYAN)🚫 Testing Pod NotReady scenario...$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(YELLOW)📋 This test creates pods with failing readiness probes$(RESET)"
+	@echo "$(YELLOW)📊 Monitor in Grafana: Kubernetes / Pods$(RESET)"
+	@echo "$(YELLOW)🔔 Expected alert: KubePodNotReady (after ~15min)$(RESET)"
+	@echo ""
+	
+	# Deploy pod with failing readiness probe
+	@$(call execute_cmd,kubectl apply -f monitoring/test-resources/pod-not-ready-test.yaml)
+	
+	@echo "$(GREEN)✅ NotReady test deployment created$(RESET)"
+	@echo "$(CYAN)📊 Monitor progress:$(RESET)"
+	@echo "  • Pod status: kubectl get pods -l app=notready-demo -w"
+	@echo "  • Events: kubectl get events --field-selector reason=Unhealthy"
+	@echo "  • Grafana: http://localhost:30301 → Kubernetes / Deployments"
+	@echo ""
+	@echo "$(YELLOW)⏱️  Wait ~15 minutes for KubePodNotReady alert$(RESET)"
+	@echo "$(CYAN)🧹 Cleanup: make test-pod-not-ready-cleanup$(RESET)"
+
+test-pod-not-ready-cleanup: ## Clean up pod not ready test resources
+	@echo "$(CYAN)🧹 Cleaning up pod not ready test...$(RESET)"
+	@$(call execute_cmd,kubectl delete deployment notready-demo --ignore-not-found=true)
+	@echo "$(GREEN)✅ Pod not ready test cleanup completed$(RESET)"
+
+test-alert-instant: ## Test instant alert routing to Discord
+	@echo "$(CYAN)📢 Testing Alert Routing & Discord Integration...$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(YELLOW)📋 This test uses existing instant alert system$(RESET)"
+	@echo "$(YELLOW)📊 Monitor in AlertManager: http://localhost:30093$(RESET)"
+	@echo "$(YELLOW)🔔 Expected: Instant Discord notifications$(RESET)"
+	@echo ""
+	
+	# Use existing test-alert-instant.yaml
+	@if [ -f monitoring/alertmanager/test-alert-instant.yaml ]; then \
+		echo "$(CYAN)Deploying instant test alerts...$(RESET)"; \
+		$(call execute_cmd,kubectl apply -f monitoring/alertmanager/test-alert-instant.yaml); \
+	else \
+		echo "$(RED)❌ test-alert-instant.yaml not found$(RESET)"; \
+		exit 1; \
+	fi
+	
+	@echo "$(GREEN)✅ Instant test alerts deployed$(RESET)"
+	@echo "$(CYAN)📊 Monitor progress:$(RESET)"
+	@echo "  • AlertManager: http://localhost:30093"
+	@echo "  • Prometheus alerts: http://localhost:30090/alerts"  
+	@echo "  • Discord channel: Check your configured webhook"
+	@echo ""
+	@echo "$(YELLOW)⏱️  Alerts should fire within 30 seconds$(RESET)"
+	@echo "$(CYAN)⏱️  Wait 2-3 minutes to see all alert types (info/warning/time-based)$(RESET)"
+	@echo "$(CYAN)🧹 Cleanup: make test-alert-cleanup$(RESET)"
+
+# Convenience aliases for compatibility
+test-alert-route: test-alert-instant ## Alias for test-alert-instant
+
+test-alert-cleanup: ## Clean up alert routing test
+	@echo "$(CYAN)🧹 Cleaning up alert routing test...$(RESET)"
+	@$(call execute_cmd,kubectl delete prometheusrule test-instant-alert -n monitoring --ignore-not-found=true)
+	@$(call execute_cmd,kubectl delete configmap instant-alert-test-instructions -n monitoring --ignore-not-found=true)
+	@echo "$(GREEN)✅ Alert routing test cleanup completed$(RESET)"
+
+test-alert-fast-deploy: ## Deploy fast test alerts (fires in 1-2 min instead of 15-20 min)
+	@echo "$(CYAN)🚀 Deploying fast test alerts...$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(YELLOW)⚠️  These alerts are for TESTING ONLY - not for production!$(RESET)"
+	@echo "$(YELLOW)📋 Fast alerts will fire in 1-2 minutes instead of 15-20 minutes$(RESET)"
+	@echo ""
+	
+	# Deploy fast test alerts
+	@$(call execute_cmd,kubectl apply -f monitoring/alertmanager/test-alerts-fast.yaml)
+	
+	@echo "$(GREEN)✅ Fast test alerts deployed$(RESET)"
+	@echo "$(CYAN)Alert timing:$(RESET)"
+	@echo "  • TestPodCrashLoopingFast: ~1-2 minutes (vs 15-20 min)"
+	@echo "  • TestPodNotReadyFast: ~2-3 minutes (vs 15-20 min)"
+	@echo "  • TestNodeNotReadyFast: ~2-3 minutes (vs 15-20 min)"
+	@echo "  • TestCPUThrottlingHighFast: ~1-2 minutes (vs 5-10 min)"
+	@echo ""
+	@echo "$(CYAN)Monitor alerts at:$(RESET)"
+	@echo "  • Prometheus: http://localhost:30090/alerts"
+	@echo "  • AlertManager: http://localhost:30093"
+	@echo ""
+	@echo "$(YELLOW)🧹 Remember to clean up: make test-alert-fast-cleanup$(RESET)"
+
+test-alert-fast-cleanup: ## Remove fast test alerts
+	@echo "$(CYAN)🧹 Removing fast test alerts...$(RESET)"
+	@$(call execute_cmd,kubectl delete prometheusrule test-alerts-fast -n monitoring --ignore-not-found=true)
+	@$(call execute_cmd,kubectl delete configmap test-alerts-fast-instructions -n monitoring --ignore-not-found=true)
+	@echo "$(GREEN)✅ Fast test alerts removed$(RESET)"
+
+test-alert-fast-status: ## Check if fast test alerts are deployed
+	@echo "$(CYAN)📊 Checking fast test alert status...$(RESET)"
+	@if kubectl get prometheusrule test-alerts-fast -n monitoring >/dev/null 2>&1; then \
+		echo "$(GREEN)✅ Fast test alerts are deployed$(RESET)"; \
+		echo ""; \
+		echo "$(CYAN)Active fast test alerts:$(RESET)"; \
+		kubectl get prometheusrule test-alerts-fast -n monitoring -o jsonpath='{range .spec.groups[*].rules[*]}- {.alert}{"\n"}{end}'; \
+		echo ""; \
+		echo "$(CYAN)Current alert states:$(RESET)"; \
+		curl -s http://localhost:30090/api/v1/alerts 2>/dev/null | jq -r '.data.alerts[] | select(.labels.test_type=="fast") | "  • \(.labels.alertname): \(.state)"' || echo "  (Prometheus not accessible on port 30090)"; \
+	else \
+		echo "$(YELLOW)⚠️  Fast test alerts are NOT deployed$(RESET)"; \
+		echo "$(CYAN)Deploy them with: make test-alert-fast-deploy$(RESET)"; \
+	fi
+
+test-load-pressure: ## Test resource pressure and CPU throttling alerts
+	@echo "$(CYAN)🚀 Testing Resource Pressure & Load...$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(YELLOW)📋 This test generates HTTP load on demo application$(RESET)"
+	@echo "$(YELLOW)📊 Monitor in Grafana: Kubernetes / Compute Resources$(RESET)"
+	@echo "$(YELLOW)🔔 Expected alert: CPUThrottlingHigh (if CPU limits are set)$(RESET)"
+	@echo ""
+	
+	# Check prerequisites
+	@if ! kubectl get pods -n demo-ghcr --field-selector=status.phase=Running >/dev/null 2>&1; then \
+		echo "$(YELLOW)⚠️  demo-ghcr not running. Please run: make deploy-app-ghcr$(RESET)"; \
+		exit 1; \
+	fi
+	
+	@if ! command -v hey >/dev/null 2>&1 && ! command -v k6 >/dev/null 2>&1; then \
+		echo "$(RED)❌ Neither hey nor k6 found. Install one of them:$(RESET)"; \
+		echo "  brew install hey"; \
+		echo "  brew install k6"; \
+		exit 1; \
+	fi
+	
+	# Start load test
+	@echo "$(CYAN)Starting HTTP load test...$(RESET)"
+	@if command -v hey >/dev/null 2>&1; then \
+		echo "$(CYAN)Using hey for load testing...$(RESET)"; \
+		kubectl port-forward -n demo-ghcr svc/ghcr-podinfo 9898:9898 & \
+		PID=$$!; \
+		sleep 3; \
+		hey -z 60s -c 50 -q 100 http://localhost:9898/ || true; \
+		kill $$PID 2>/dev/null || true; \
+	elif command -v k6 >/dev/null 2>&1; then \
+		echo "$(CYAN)Using k6 for load testing...$(RESET)"; \
+		kubectl port-forward -n demo-ghcr svc/ghcr-podinfo 9898:9898 & \
+		PID=$$!; \
+		sleep 3; \
+		echo 'import http from "k6/http"; export let options = { vus: 50, duration: "60s" }; export default function() { http.get("http://localhost:9898/"); }' | k6 run - || true; \
+		kill $$PID 2>/dev/null || true; \
+	fi
+	
+	@echo "$(GREEN)✅ Load test completed$(RESET)"
+	@echo "$(CYAN)📊 Check resource metrics in Grafana:$(RESET)"
+	@echo "  • Pod resources: Kubernetes / Compute Resources / Pod"
+	@echo "  • Node resources: Node Exporter / Nodes"
+	@echo "  • Cluster overview: Kubernetes / Cluster"
+	@echo ""
+	@echo "$(CYAN)🧹 Cleanup: make test-load-pressure-cleanup$(RESET)"
+
+test-load-pressure-cleanup: ## Clean up load testing resources
+	@echo "$(CYAN)🧹 Cleaning up load test processes...$(RESET)"
+	@pkill -f "port-forward.*podinfo" 2>/dev/null || true
+	@echo "$(GREEN)✅ Load pressure test cleanup completed$(RESET)"
+
+test-cleanup-all: ## Clean up all test resources
+	@echo "$(CYAN)🧹 Cleaning up all monitoring test resources...$(RESET)"
+	@echo "$(CYAN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@$(MAKE) test-crash-loop-cleanup
+	@$(MAKE) test-node-failure-cleanup  
+	@$(MAKE) test-pod-not-ready-cleanup
+	@$(MAKE) test-alert-cleanup
+	@$(MAKE) test-alert-fast-cleanup
+	@$(MAKE) test-load-pressure-cleanup
+	@echo "$(GREEN)✅ All monitoring tests cleaned up$(RESET)"
+
+test-all: ## Run complete monitoring test suite
+	@echo "$(CYAN)🧪 Running Complete Monitoring Test Suite$(RESET)"
+	@echo "$(CYAN)═══════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)⚠️  This will run all monitoring tests sequentially$(RESET)"
+	@echo "$(YELLOW)⏱️  Total estimated time: 45-60 minutes$(RESET)"
+	@echo "$(YELLOW)📊 Monitor progress in Grafana and AlertManager$(RESET)"
+	@echo ""
+	@read -p "Continue with full test suite? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
+	
+	@echo "$(CYAN)Step 1/6: Environment validation...$(RESET)"
+	@$(MAKE) test-env-check
+	@echo ""
+	
+	@echo "$(CYAN)Step 2/6: Pod crash loop test...$(RESET)"
+	@$(MAKE) test-crash-loop
+	@echo "$(YELLOW)⏱️  Waiting 6 minutes for alert to fire...$(RESET)"
+	@sleep 360
+	@$(MAKE) test-crash-loop-cleanup
+	@echo ""
+	
+	@echo "$(CYAN)Step 3/6: Alert routing test...$(RESET)" 
+	@$(MAKE) test-alert-instant
+	@echo "$(YELLOW)⏱️  Waiting 2 minutes for alerts to process...$(RESET)"
+	@sleep 120
+	@$(MAKE) test-alert-cleanup
+	@echo ""
+	
+	@echo "$(CYAN)Step 4/6: Pod not ready test...$(RESET)"
+	@$(MAKE) test-pod-not-ready
+	@echo "$(YELLOW)⏱️  Waiting 16 minutes for alert to fire...$(RESET)"
+	@sleep 960
+	@$(MAKE) test-pod-not-ready-cleanup
+	@echo ""
+	
+	@echo "$(CYAN)Step 5/6: Load pressure test...$(RESET)"
+	@$(MAKE) test-load-pressure
+	@echo ""
+	
+	@echo "$(CYAN)Step 6/6: Node failure test...$(RESET)"
+	@$(MAKE) test-node-failure
+	@echo "$(YELLOW)⏱️  Waiting 16 minutes for alert to fire...$(RESET)"
+	@sleep 960
+	@$(MAKE) test-node-failure-cleanup
+	@echo ""
+	
+	@echo "$(GREEN)🎉 Complete monitoring test suite finished!$(RESET)"
+	@echo "$(CYAN)📊 Review results in Grafana dashboards$(RESET)"
+	@echo "$(CYAN)🔔 Check Discord for all alert notifications$(RESET)"
+
+
+#=============================================================================
 # UTILITIES
 #=============================================================================
 check-git-status: ## Check for uncommitted changes (used by GHCR workflow)
@@ -680,7 +1034,7 @@ pause-services: ## Pause all services but keep data
 	# Pause Monitoring
 	$(call execute_cmd, kubectl scale deployment -n monitoring --replicas=0 --all 2>/dev/null || true)
 	$(call execute_cmd, kubectl scale statefulset -n monitoring --replicas=0 --all 2>/dev/null || true)
-	# Pause Demo Applications
+	# Pause Demo Applications  
 	$(call execute_cmd, kubectl scale deployment -n demo-ghcr --replicas=0 --all 2>/dev/null || true)
 	$(call execute_cmd, kubectl scale deployment -n demo-local --replicas=0 --all 2>/dev/null || true)
 	# Pause Ingress Controller

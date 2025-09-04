@@ -1,0 +1,202 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: test-alerts-fast
+  namespace: monitoring
+  labels:
+    app: kube-prometheus-stack
+    prometheus: kube-prometheus-stack-prometheus
+    test: "true"
+spec:
+  groups:
+  - name: test.fast.alerts
+    interval: 10s  # Check every 10 seconds for faster detection
+    rules:
+    
+    # Fast Pod Crash Loop Detection - Fires in ~1-2 minutes
+    - alert: TestPodCrashLoopingFast
+      expr: |
+        max_over_time(
+          kube_pod_container_status_waiting_reason{
+            reason="CrashLoopBackOff",
+            job="kube-state-metrics",
+            namespace=~".*"
+          }[2m]
+        ) >= 1
+      for: 30s  # Only 30 seconds pending time (vs 15m in production)
+      labels:
+        severity: warning
+        test_type: fast
+        environment: test
+      annotations:
+        summary: "🧪 FAST TEST: Pod is crash looping"
+        description: |
+          Pod {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) 
+          is in CrashLoopBackOff state.
+          This is a FAST TEST alert (fires in ~1-2 min vs 15-20 min for production).
+        runbook_url: "This is a test alert for development - not for production use"
+    
+    # Fast Pod Not Ready Detection - Fires in ~2-3 minutes
+    - alert: TestPodNotReadyFast
+      expr: |
+        sum by (namespace, pod) (
+          max by(namespace, pod) (
+            kube_pod_status_phase{
+              job="kube-state-metrics", 
+              phase=~"Pending|Unknown"
+            }
+          ) * on(namespace, pod) group_left(owner_kind) topk by(namespace, pod) (
+            1, max by(namespace, pod, owner_kind) (kube_pod_owner{owner_kind!="Job"})
+          )
+        ) > 0
+      for: 1m  # Only 1 minute pending time (vs 15m in production)
+      labels:
+        severity: warning
+        test_type: fast
+        environment: test
+      annotations:
+        summary: "🧪 FAST TEST: Pod not ready"
+        description: |
+          Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in non-ready 
+          state for more than 1 minute.
+          This is a FAST TEST alert (fires in ~2-3 min vs 15+ min for production).
+        runbook_url: "This is a test alert for development - not for production use"
+    
+    # Fast Node Not Ready Detection - Fires in ~2-3 minutes  
+    - alert: TestNodeNotReadyFast
+      expr: |
+        kube_node_status_condition{
+          job="kube-state-metrics",
+          condition="Ready",
+          status="true"
+        } == 0
+      for: 2m  # Only 2 minutes pending time (vs 15m in production)
+      labels:
+        severity: critical
+        test_type: fast
+        environment: test
+      annotations:
+        summary: "🧪 FAST TEST: Node not ready"
+        description: |
+          Node {{ $labels.node }} has been in NotReady state for more than 2 minutes.
+          This is a FAST TEST alert (fires in ~2-3 min vs 15+ min for production).
+        runbook_url: "This is a test alert for development - not for production use"
+    
+    # Fast CPU Throttling Detection - Fires in ~1-2 minutes
+    - alert: TestCPUThrottlingHighFast
+      expr: |
+        sum(
+          rate(container_cpu_cfs_throttled_periods_total{
+            container!="", 
+            image!=""
+          }[3m])
+        ) by (container, pod, namespace) /
+        sum(
+          rate(container_cpu_cfs_periods_total{
+            container!="",
+            image!=""
+          }[3m])
+        ) by (container, pod, namespace) > 0.25
+      for: 30s  # Only 30 seconds pending time
+      labels:
+        severity: info
+        test_type: fast
+        environment: test
+      annotations:
+        summary: "🧪 FAST TEST: High CPU throttling"
+        description: |
+          Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} 
+          has CPU throttling > 25%.
+          This is a FAST TEST alert for load testing validation.
+        runbook_url: "This is a test alert for development - not for production use"
+    
+    # Fast High Memory Usage Detection - Fires immediately
+    - alert: TestHighMemoryUsageFast
+      expr: |
+        sum(container_memory_working_set_bytes{
+          pod!="",
+          container!="",
+          container!="POD"
+        }) by (pod, namespace, container) /
+        sum(container_spec_memory_limit_bytes{
+          pod!="",
+          container!="",
+          container!="POD"
+        } > 0) by (pod, namespace, container) > 0.8
+      for: 30s  # Only 30 seconds pending time
+      labels:
+        severity: warning
+        test_type: fast
+        environment: test
+      annotations:
+        summary: "🧪 FAST TEST: High memory usage"
+        description: |
+          Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} 
+          is using > 80% of its memory limit.
+          This is a FAST TEST alert for resource monitoring.
+        runbook_url: "This is a test alert for development - not for production use"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-alerts-fast-instructions
+  namespace: monitoring
+data:
+  README.md: |
+    # Fast Test Alerts Documentation
+    
+    ## Purpose
+    These alerts are designed for DEVELOPMENT and TESTING only.
+    They fire much faster than production alerts to provide quick feedback during testing.
+    
+    ## Alert Timing Comparison
+    
+    | Alert | Production Time | Fast Test Time | Speedup |
+    |-------|----------------|----------------|---------|
+    | PodCrashLooping | ~15-20 min | ~1-2 min | 10x faster |
+    | PodNotReady | ~15-20 min | ~2-3 min | 7x faster |
+    | NodeNotReady | ~15-20 min | ~2-3 min | 7x faster |
+    | CPUThrottlingHigh | ~5-10 min | ~1-2 min | 5x faster |
+    | HighMemoryUsage | ~5-10 min | ~30-60 sec | 10x faster |
+    
+    ## How Fast Alerts Work
+    
+    1. **Shorter evaluation windows**: Use 2-3 minute windows instead of 5 minutes
+    2. **Minimal pending time**: Use 30s-2m `for` duration instead of 15 minutes
+    3. **Higher evaluation frequency**: Check every 10 seconds instead of 30-60 seconds
+    4. **Test labels**: All alerts have `test_type: fast` and `environment: test` labels
+    
+    ## Usage
+    
+    ```bash
+    # Deploy fast test alerts
+    kubectl apply -f monitoring/alertmanager/test-alerts-fast.yaml
+    
+    # Or use Makefile
+    make test-alert-fast-deploy
+    
+    # Run your tests - alerts will fire quickly
+    make test-crash-loop
+    make test-node-failure
+    make test-pod-not-ready
+    make test-load-pressure
+    
+    # Clean up when done
+    make test-alert-fast-cleanup
+    ```
+    
+    ## Important Notes
+    
+    ⚠️ **DO NOT USE IN PRODUCTION** - These alerts are too sensitive for production use
+    ⚠️ **Temporary Only** - Deploy only during testing, remove when done
+    ✅ **Development Only** - Perfect for CI/CD pipelines and local testing
+    ✅ **No Impact on Production Alerts** - These are separate from production rules
+    
+    ## Identifying Test Alerts
+    
+    All fast test alerts have:
+    - Alert name prefix: `Test*Fast`
+    - Label: `test_type: fast`
+    - Label: `environment: test`
+    - Clear test indicators in summary/description

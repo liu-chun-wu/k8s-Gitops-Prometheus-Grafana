@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notready-demo
+  namespace: default
+  labels:
+    app: notready-demo
+    test: readiness-failure
+  annotations:
+    test.description: "Deployment with failing readiness probe"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notready-demo
+  template:
+    metadata:
+      labels:
+        app: notready-demo
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+        readinessProbe:
+          httpGet:
+            path: /non-existent-healthcheck
+            port: 9999
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+          timeoutSeconds: 5
