@@ -1,64 +1,89 @@
-# K8s GitOps Demo with Prometheus & Grafana
+# K8s GitOps with Prometheus & Grafana
 
-使用 Kubernetes、ArgoCD、Prometheus 和 Grafana 建立現代化的雲原生應用部署與監控系統。
+A production-ready Kubernetes GitOps demo featuring ArgoCD, Prometheus monitoring, and Grafana dashboards.
 
-## 🚀 快速開始
+## 🚀 Quick Start
 
 ```bash
-# 1. 選擇部署模式
-make quickstart        # 互動式選擇
-make quickstart-local  # 本地開發環境
-make quickstart-ghcr   # GHCR 生產環境
+# 1. Set up Discord webhook (required)
+cp .env.example .env
+# Edit .env with your Discord webhook URL
 
-# 2. 配置本地 DNS
+# 2. Deploy everything
+make quickstart        # Interactive mode selection
+
+# 3. Configure local access
 sudo sh -c 'echo "127.0.0.1 argocd.local" >> /etc/hosts'
 
-# 3. 查看訪問資訊
-make access
-
-# 4. 暫停/恢復服務（可選）
-make pause-services    # 暫停所有服務（保留資料）
-make resume-services   # 恢復所有服務（含健康檢查）
+# 4. Access services
+make access           # Shows URLs and credentials
 ```
 
-## 🌐 服務訪問
+## 📚 Documentation
 
-| 服務 | URL | 帳號密碼 |
-|------|-----|----------|
-| ArgoCD | http://argocd.local | admin/admin123 |
-| Grafana | http://localhost:3001 | admin/admin123 |
-| Prometheus | http://localhost:9090 | - |
+### Quick References
 
-## ✨ 核心特性
+- **[Quick Start Commands](docs/guides/quickstart.md)** - Get up and running fast
+- **[Make Reference](docs/commands/make-reference.md)** - All make commands
+- **[Development Commands](docs/guides/development.md)** - Build, deploy, and test
+- **[Operations Commands](docs/guides/operations.md)** - Manage and troubleshoot
+- **[Kubectl Reference](docs/commands/kubectl-reference.md)** - All kubectl commands
+- **[Monitoring Reference](docs/guides/monitoring-reference.md)** - Metrics and queries
+- **[Troubleshooting Guide](docs/guides/troubleshooting.md)** - Fix common issues
 
-- **雙模式部署**：本地開發 (Local Registry) / 生產環境 (GHCR)
-- **完整 GitOps**：ArgoCD 自動同步，Git 作為唯一真實來源
-- **內建監控**：Prometheus + Grafana + ServiceMonitor
-- **一鍵操作**：豐富的 Makefile 命令
+### Detailed Guides
+- **[Architecture Overview](docs/guides/architecture.md)** - System design and components
+- **[Local Development Setup](docs/guides/local-setup.md)** - Complete local environment guide
+- **[GHCR Production Setup](docs/guides/ghcr-setup.md)** - GitHub Container Registry deployment
+- **[ArgoCD & GitOps Workflow](docs/guides/argocd-gitops.md)** - GitOps principles and practices
+- **[Monitoring Stack](docs/guides/monitoring-stack.md)** - Prometheus and Grafana deep dive
+- **[Alerting System](docs/guides/alerting-system.md)** - Discord/Slack alert configuration
 
-## 📚 文檔
+## 🌐 Service Access
 
-- [本地開發指南](docs/local.md) - 本地環境設置與開發流程
-- [GHCR 部署指南](docs/ghcr.md) - GitHub Container Registry 配置
-- [運維手冊](docs/operations.md) - ArgoCD、監控、故障排除
-- [命令速查](docs/commands.md) - Makefile 命令參考
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| ArgoCD | <http://argocd.local> | admin/admin123 |
+| Grafana | <http://localhost:30301> | admin/admin123 |
+| Prometheus | <http://localhost:30090> | - |
+| AlertManager | <http://localhost:30093> | - |
 
-## 🏗️ 專案結構
+## ✨ Features
+
+- **GitOps Deployment** - Automated deployments via ArgoCD
+- **Dual Registry Support** - Local development and GHCR production
+- **Complete Monitoring** - Prometheus, Grafana, and AlertManager
+- **Discord Alerting** - Real-time notifications
+- **One-Command Setup** - Simplified deployment process
+
+## 📋 Prerequisites
+
+- Docker Desktop
+- Kind (`brew install kind`)
+- kubectl (`brew install kubectl`)
+- Make (pre-installed on macOS/Linux)
+
+## 🏗️ Project Structure
 
 ```
-├── clusters/          # Kind 叢集配置
-├── gitops/           # ArgoCD 應用定義
-├── k8s/              # Kubernetes 資源
-│   └── podinfo/      # 示範應用
-├── monitoring/       # 監控系統配置
-└── ingress/          # Ingress 資源
+├── .github/             # GitHub Actions workflows
+├── clusters/            # Kind cluster definitions
+├── docs/
+│   ├── commands/        # Quick command references (kubectl, make)
+│   └── guides/          # Detailed explanations and workflows
+├── gitops/              # ArgoCD applications
+├── ingress/             # Ingress controller configurations
+├── k8s/                 # Kubernetes manifests
+├── monitoring/          # Prometheus & Grafana configs
+├── scripts/             # Automation scripts
+├── Dockerfile           # Container image definition
+└── Makefile             # Build and deployment automation
 ```
 
-## ⚠️ 安全提示
+## ⚠️ Security Note
 
-本專案為開發環境配置了固定密碼，**請勿在生產環境使用**！  
-生產環境請使用 Secret 管理工具（如 Sealed Secrets）。
+This project uses fixed passwords for demo purposes. For production use, implement proper secret management with tools like Sealed Secrets or External Secrets Operator.
 
-## 📄 授權
+## 📄 License
 
-MIT License
+MIT License - See LICENSE file for details
