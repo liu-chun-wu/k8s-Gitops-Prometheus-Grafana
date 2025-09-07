@@ -21,16 +21,6 @@ prometheus:
       requests:
         cpu: 100m
         memory: 512Mi
-    affinity:
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-          - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-              - gitops-demo-control-plane
-              - gitops-demo-worker
   
   # 配置 Prometheus 服務為 NodePort
   service:
@@ -54,17 +44,6 @@ grafana:
     requests:
       cpu: 100m
       memory: 256Mi
-
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-        - matchExpressions:
-          - key: kubernetes.io/hostname
-            operator: In
-            values:
-            - gitops-demo-control-plane
-            - gitops-demo-worker
 
   service:
     type: NodePort
@@ -190,16 +169,6 @@ alertmanager:
       requests:
         cpu: 25m
         memory: 64Mi
-    affinity:
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-          - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-              - gitops-demo-control-plane
-              - gitops-demo-worker
 
 nodeExporter:
   enabled: true

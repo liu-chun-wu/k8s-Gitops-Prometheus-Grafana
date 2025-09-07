@@ -31,6 +31,13 @@ nodes:
         protocol: TCP
   - role: worker
   - role: worker
+  - role: worker
+    kubeadmConfigPatches:
+    - |
+      kind: JoinConfiguration
+      nodeRegistration:
+        kubeletExtraArgs:
+          register-with-taints: "testing=true:NoSchedule"
 
 # Configure containerd to use local registry
 containerdConfigPatches:

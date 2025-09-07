@@ -652,10 +652,11 @@ test-node-failure: ## Test node failure detection and pod rescheduling
 	@echo "$(YELLOW)🔔 Expected alert: KubeNodeNotReady (after ~15min)$(RESET)"
 	@echo ""
 	
-	# Find and stop worker2 node (keeping monitoring services on worker and control-plane)
-	@WORKER_CONTAINER="$(CLUSTER_NAME)-worker2"; \
+	# Find and stop worker3 node (dedicated test node without services)
+	@WORKER_CONTAINER="$(CLUSTER_NAME)-worker3"; \
 	if ! docker ps --format "{{.Names}}" | grep -q "$$WORKER_CONTAINER"; then \
-		echo "$(RED)❌ Worker2 node not found in kind cluster$(RESET)"; \
+		echo "$(RED)❌ Worker3 node not found in kind cluster$(RESET)"; \
+		echo "$(YELLOW)Make sure cluster was created with 3 worker nodes$(RESET)"; \
 		exit 1; \
 	fi; \
 	echo "$(CYAN)Stopping worker node: $$WORKER_CONTAINER$(RESET)"; \
