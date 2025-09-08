@@ -53,19 +53,6 @@ grafana:
   defaultDashboardsEnabled: true
   defaultDashboardsTimezone: Asia/Taipei
 
-  # 配置額外的 datasource 以支援 dashboard 的變數需求
-  additionalDataSources:
-    - name: Prometheus
-      uid: prometheus
-      type: prometheus
-      access: proxy
-      isDefault: true
-      url: http://kube-prometheus-stack-prometheus:9090/
-      jsonData:
-        timeInterval: 30s
-        httpMethod: POST
-
-
   sidecar:
     dashboards:
       enabled: true
