@@ -18,6 +18,8 @@ spec:
       labels:
         app: notready-demo
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: gitops-demo-worker3
       containers:
       - name: app
         image: nginx:1.25-alpine

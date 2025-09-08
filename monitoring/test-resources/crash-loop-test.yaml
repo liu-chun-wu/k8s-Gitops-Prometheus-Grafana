@@ -8,14 +8,21 @@ metadata:
   annotations:
     test.description: "Pod that crashes to trigger KubePodCrashLooping alert"
 spec:
+  nodeSelector:
+    kubernetes.io/hostname: gitops-demo-worker2
   containers:
-  - name: boom
-    image: busybox:1.35
-    command: ["sh", "-c", "echo 'Test starting...'; echo 'Crashing in 3..2..1..'; sleep 2; exit 1"]
-    resources:
-      limits:
-        memory: "64Mi"
-        cpu: "50m"
-      requests:
-        memory: "32Mi"
-        cpu: "25m"
+    - name: boom
+      image: busybox:1.35
+      command:
+        [
+          "sh",
+          "-c",
+          "echo 'Test starting...'; echo 'Crashing in 3..2..1..'; sleep 2; exit 1",
+        ]
+      resources:
+        limits:
+          memory: "64Mi"
+          cpu: "50m"
+        requests:
+          memory: "32Mi"
+          cpu: "25m"

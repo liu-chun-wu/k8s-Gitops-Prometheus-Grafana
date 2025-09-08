@@ -682,10 +682,18 @@ test-node-failure-cleanup: ## Clean up node failure test
 		. /tmp/test-node-failure.env; \
 		if [ -n "$$STOPPED_NODE" ]; then \
 			echo "$(CYAN)Restarting node: $$STOPPED_NODE$(RESET)"; \
-			$(call execute_cmd,docker start $$STOPPED_NODE); \
+			if [ "$(DRY_RUN)" = "1" ]; then \
+				echo "$(YELLOW)[DRY_RUN] Would execute: docker start $$STOPPED_NODE$(RESET)"; \
+			else \
+				docker start $$STOPPED_NODE; \
+			fi; \
 			echo "$(YELLOW)⏱️  Waiting for node to become Ready...$(RESET)"; \
 			sleep 10; \
-			$(call execute_cmd,kubectl wait --for=condition=Ready node/$$STOPPED_NODE --timeout=120s); \
+			if [ "$(DRY_RUN)" = "1" ]; then \
+				echo "$(YELLOW)[DRY_RUN] Would execute: kubectl wait --for=condition=Ready node/$$STOPPED_NODE --timeout=120s$(RESET)"; \
+			else \
+				kubectl wait --for=condition=Ready node/$$STOPPED_NODE --timeout=120s; \
+			fi; \
 		fi; \
 		rm -f /tmp/test-node-failure.env; \
 	else \
